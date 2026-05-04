@@ -1,0 +1,13 @@
+{
+    "dataset_path": "dades_trauma_prova.csv",
+    "results_path": "results/",
+    "artifacts_path": "artifacts/",
+    "target_column": "ssi_status",
+    "exclude_columns": ["id_pacient"],
+    "test_size": 0.2,
+    "random_state": 42,
+    "normalize": true,
+    "apply_smote": true,
+    "target_sensitivity": 0.90,
+    "num_cv_splits": 5
+}

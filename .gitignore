@@ -1,0 +1,42 @@
+### TFM SPECIFIC ###
+# Entorn virtual
+tfm_env/
+venv/
+env/
+
+# Fitxers de dades i carpetes demanades
+ssi-detect-main.zip
+ssi-detect-main/
+*.csv
+*.xlsx
+*.xls
+
+# Resultats i Artefactes (opcional: si vols guardar els resultats al Git, comenta aquestes línies)
+results/
+artifacts/
+
+### PYTHON ###
+# Fitxers compilats
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribucions i paquets
+dist/
+build/
+*.egg-info/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+### SYSTEM FILES ###
+# Linux
+.DS_Store
+.directory
+
+# IDEs (VS Code, PyCharm)
+.vscode/
+.idea/
+
+### LOGS ###
+*.log
