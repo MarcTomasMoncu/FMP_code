@@ -1,8 +1,8 @@
 {
-    "dataset_path": "dades_trauma_prova.csv",
+    "dataset_path": "fake_dataset_v2.csv",
     "results_path": "results/",
     "artifacts_path": "artifacts/",
-    "target_column": "ssi_status",
+    "target_column": "infection",
     "exclude_columns": ["id_pacient"],
     "test_size": 0.2,
     "random_state": 42,
