@@ -1,82 +1,49 @@
+**PREDICTION OF SURGICAL SITE INFECTIONS (SSI) IN TRAUMATOLOGY**
 
-PROJECTE TFM: Vigilància d'Infeccions de Lloc Quirúrgic (SSI) en Trauma
+This project is the practical component of the Final Master Project (FMP). Its objective is to compare various Machine Learning and Deep Learning models for the retrospective detection of SSI in trauma surgery.
 
+**PROJECT STRUCTURE**
 
-Aquest projecte implementa un sistema de triatge automatitzat per a la 
-identificació retrospectiva d'infeccions de lloc quirúrgic (SSI) en la 
-especialitat de cirurgia de trauma. Compara models estadístics clàssics, 
-Machine Learning i Deep Learning.
+├── config.json           Centralized configuration (paths, hyperparameters)
+├── train_pipeline.py     Main experiment orchestrator
+├── preprocessing.py      Data cleaning, normalization, and balancing (SMOTE)
+├── interpretability.py   Explainability analysis using SHAP
+├── models/               Model definition package
+│   ├── **init**.py
+│   ├── ml_models.py      Classical models (RF, XGB, SVC, QDA...)
+│   └── dl_models.py      Dense Neural Network (DNN) with TensorFlow/Keras
+├── utils/                Statistical utilities
+│   ├── **init**.py
+│   └── metrics.py        Metrics calculation and threshold optimization
+├── results/              Output: SHAP plots and CSV reports (automatically generated)
+└── artifacts/            Output: Trained models (.pkl / .keras) (automatically generated)
 
-------------------------------------------------------------------------
-1. ESTRUCTURA DEL PROJECTE
-------------------------------------------------------------------------
+**INSTALLATION AND SETUP**
 
-L'arquitectura està modularitzada per facilitar la reproductibilitat:
+1. Clone repository
+   git clone https://github.com/MarcTomasMoncu/FMP_code.git
+   cd FMP_code
 
-- config.json: Fitxer central de configuració. Aquí es defineixen les 
-  variables, les rutes de dades i el llindar de sensibilitat (90%).
-- train_pipeline.py: Script principal que executa tot el procés: càrrega, 
-  entrenament, validació creuada, avaluació i interpretabilitat.
-- preprocessing.py: Gestiona la càrrega de dades, la normalització, 
-  l'estratificació (stratify) i el balanceig de classes (SMOTE).
-- models/
-    - ml_models.py: Definició dels models de Machine Learning (RF, XGB, 
-      QDA, etc.) i la seva validació creuada.
-    - dl_models.py: Definició de la Xarxa Neural Densa (DNN) amb TensorFlow.
-- utils/
-    - metrics.py: Càlcul de mètriques clíniques (Sensibilitat, Especificitat, 
-      VPP, VPN, AUC) i cerca dinàmica del llindar (threshold).
-- interpretability.py: Generació d'explicacions clíniques mitjançant SHAP.
-- .gitignore: Filtre per no pujar fitxers innecessaris (entorns virtuals, 
-  dades privades, etc.) al repositori.
+2. Create virtual environment and install dependencies
+   python3 -m venv venv
+   source venv/bin/activate 
+   pip install -r requirements.txt
 
-------------------------------------------------------------------------
-2. PREPARACIÓ DE L'ENTORN
-------------------------------------------------------------------------
+**CONFIGURATION**
 
-Passos per configurar l'ordinador abans d'executar el codi:
+Variables are controlled through config.json, such as sensitivity, activation of SMOTE for synthetic data, and whether certain model columns should be ignored.
 
-1. Crear l'entorn virtual:
-   $ python3 -m venv tfm_env
+**USAGE**
 
-2. Activar l'entorn:
-   $ source tfm_env/bin/activate
+From the root folder of the repository, simply run in the terminal:
+  $python3 train_pipeline.py
 
-3. Instal·lar les llibreries necessàries:
-   $ pip install xgboost shap imbalanced-learn scikit-learn pandas numpy tensorflow matplotlib
+**RESULTS AND INTERPRETATION**
 
-------------------------------------------------------------------------
-3. EXECUCIÓ DELS MODELS
-------------------------------------------------------------------------
+In the results folder, the following are automatically generated:
 
-Una vegada configurat l'entorn i preparat el fitxer de dades (ex: dades.csv):
+1. performance_results.csv: Comparison of all models under a 90% sensitivity threshold.
 
-1. Configurar config.json:
-   - Modifica "dataset_path" amb el nom del teu fitxer.
-   - Revisa "target_column" (la variable a predir).
-   - Especifica "exclude_columns" (IDs de pacients o dades no predictives).
+2. cross_validation_results.csv: Training robustness statistics.
 
-2. Executar el pipeline:
-   $ python3 train_pipeline.py
-
-------------------------------------------------------------------------
-4. RESULTATS I OUTPUTS
-------------------------------------------------------------------------
-
-El sistema generarà automàticament dues carpetes:
-
-- results/: 
-    - performance_results.csv: Taula comparativa de tots els models amb 
-      el llindar ajustat al 90% de sensibilitat.
-    - cross_validation_results.csv: Resultats de la robustesa dels models.
-    - prediction_probs.csv: Probabilitats predites per a cada pacient.
-    - Gràfics SHAP (.png): Visualització de quines variables afecten més al risc.
-
-- artifacts/:
-    - Guarda els models ja entrenats en format .pkl (ML) o .h5 (DL) per 
-      poder-los utilitzar en el futur sense tornar a entrenar.
-
-------------------------------------------------------------------------
-Notes: Aquest codi està dissenyat com a eina de suport a la decisió clínica. 
-Sempre s'ha de mantenir la supervisió humana per a la validació final 
-dels casos d'infecció.
+3. SHAP plots: Visualization of feature importance (risk factors) for tree-based models.
