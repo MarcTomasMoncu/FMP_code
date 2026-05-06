@@ -7,11 +7,9 @@ def generate_shap_summary(model, X_test, model_name, output_path):
     os.makedirs(output_path, exist_ok=True)
     
     try:
-        # Per a models d'arbres (com Random Forest o XGBoost)
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(X_test)
         
-        # Si retorna una llista (cas de classificació binària en RF) agafem la classe 1
         if isinstance(shap_values, list):
             shap_values = shap_values[1]
             

@@ -1,15 +1,18 @@
 import pickle
 from sklearn import svm, tree, naive_bayes, discriminant_analysis
+from sklearn.ensemble import RandomForestClassifier # <--- AFEGIR AQUESTA LÍNIA
 from xgboost import XGBClassifier
 from sklearn.model_selection import KFold
 from utils.metrics import calculate_metrics
+
 
 def initialize_models():
     return {
         "BernoulliNB": naive_bayes.BernoulliNB(),
         "DecisionTreeClassifier": tree.DecisionTreeClassifier(max_depth=3),
         "SVC": svm.SVC(probability=True),
-        "QuadraticDiscriminantAnalysis": discriminant_analysis.QuadraticDiscriminantAnalysis(),
+        "QuadraticDiscriminantAnalysis": discriminant_analysis.QuadraticDiscriminantAnalysis(reg_param=0.1),
+        "RandomForestClassifier": RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42),
         "XGBClassifier": XGBClassifier(learning_rate=0.1, max_depth=3)
     }
 
