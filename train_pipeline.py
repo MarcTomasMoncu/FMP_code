@@ -22,8 +22,13 @@ def main(config_path):
     
     os.makedirs(results_path, exist_ok=True)
     os.makedirs(artifacts_path, exist_ok=True)
-
+##################################################
+##################################################
+####################################################
     X_train, X_test, y_train, y_test, scaler, feature_names = split_and_preprocess( #call the script of processing 
+######################################################
+######################################################
+###################################################
         dataset_path,
         exclude_columns=config.get("exclude_columns", []),
         target_column=config["target_column"],

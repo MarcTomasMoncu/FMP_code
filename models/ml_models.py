@@ -1,6 +1,6 @@
 import pickle
 from sklearn import svm, tree, naive_bayes, discriminant_analysis
-from sklearn.ensemble import RandomForestClassifier # <--- AFEGIR AQUESTA LÍNIA
+from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from sklearn.model_selection import KFold
 from utils.metrics import calculate_metrics
