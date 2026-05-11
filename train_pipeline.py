@@ -75,7 +75,6 @@ def main(config_path):
     combined_predictions.to_csv(os.path.join(results_path, "prediction_probs.csv"), index=False, sep=",") 
     combined_metrics.to_csv(os.path.join(results_path, "performance_results.csv"), sep=",")  
       
-
 if __name__ == "__main__": #execute the main function with the path of the configuration file as an argument
     config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "config.json")) 
     main(config_path)

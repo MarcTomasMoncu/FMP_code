@@ -3,7 +3,7 @@
     "results_path": "results/",
     "artifacts_path": "artifacts/",
     "target_column": "infection",
-    "exclude_columns": ["id_pacient"],
+    "exclude_columns": ["id_pacient","Female sex", "Male sex","Age"],
     "test_size": 0.2,
     "random_state": 42,
     "normalize": true,
