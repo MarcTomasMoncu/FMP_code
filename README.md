@@ -5,17 +5,29 @@ This project is the practical component of the Final Master Project (FMP). Its o
 **PROJECT STRUCTURE**
 
 ├── config.json           Centralized configuration (paths, hyperparameters)
+
 ├── train_pipeline.py     Main experiment orchestrator
+
 ├── preprocessing.py      Data cleaning, normalization, and balancing (SMOTE)
+
 ├── interpretability.py   Explainability analysis using SHAP
+
 ├── models/               Model definition package
+
 │   ├── **init**.py
+
 │   ├── ml_models.py      Classical models (RF, XGB, SVC, QDA...)
+
 │   └── dl_models.py      Dense Neural Network (DNN) with TensorFlow/Keras
+
 ├── utils/                Statistical utilities
+
 │   ├── **init**.py
+
 │   └── metrics.py        Metrics calculation and threshold optimization
+
 ├── results/              Output: SHAP plots and CSV reports (automatically generated)
+
 └── artifacts/            Output: Trained models (.pkl / .keras) (automatically generated)
 
 **INSTALLATION AND SETUP**
