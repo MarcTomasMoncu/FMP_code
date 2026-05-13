@@ -5,7 +5,7 @@ from models.dl_models import build_dnn_model, cross_validate_dnn, train_and_eval
 from models.ml_models import initialize_models, cross_validate_model, train_and_evaluate_model
 from preprocessing import split_and_preprocess
 from utils.metrics import calculate_metrics, cv_metrics_to_df, find_optimal_threshold
-from interpretability import generate_shap_summary
+from interpretability import generate_shap_summary, generate_shap_dnn 
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -70,6 +70,9 @@ def main(config_path):
     model_file = os.path.join(artifacts_path, "DenseNeuralNet.keras") #save the DNN model in artifacts folder
     _, y_test_pred_probs = train_and_evaluate_dnn(dnn_model, X_train.values, y_train, X_test.values, y_test, model_file) #train and evaluate the DNN model
     
+    print(f"Generating SHAP for DenseNeuralNet...")
+    generate_shap_dnn(dnn_model, X_train, X_test, "DenseNeuralNet", results_path) #generate the SHAP summary plot for the DNN model
+
     optimal_thresh_dnn = find_optimal_threshold(y_test, y_test_pred_probs, config["target_sensitivity"]) #find the optimal threshold for the DNN model
     dnn_metrics = calculate_metrics(y_test, y_test_pred_probs, threshold=optimal_thresh_dnn) #calculate the metrics for the DNN model with the threshold that we calculated before
 
