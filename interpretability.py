@@ -13,8 +13,8 @@ def generate_shap_summary(model, X_test, model_name, output_path):
         if isinstance(shap_values, list):
             shap_values = shap_values[1] # For binary classification, we take the SHAP values for the positive classfor random forest
             
-        plt.figure()
-        shap.summary_plot(shap_values, X_test, max_display=20, show=False) #generate graph with a maximum of 20 variables
+        plt.figure(figsize=(10, 8))
+        shap.summary_plot(shap_values, X_test, plot_type="dot", max_display=20, show=False) #generate graph with a maximum of 20 variables
         plt.savefig(os.path.join(output_path, f"{model_name}_shap_summary.png"), bbox_inches='tight')
         plt.close()
         print(f"Plot generated {model_name}!!!!")
@@ -36,8 +36,8 @@ def generate_shap_dnn(model, X_train, X_test, model_name, output_path):
         else:
             shap_v = shap_values
 
-        plt.figure()
-        shap.summary_plot(shap_v, X_test, max_display=20, show=False)
+        plt.figure(figsize=(10, 8))
+        shap.summary_plot(shap_v, X_test, plot_type="dot", max_display=20, show=False)
         plt.savefig(os.path.join(output_path, f"{model_name}_shap_summary.png"), bbox_inches='tight')
         plt.close()
         print(f"Plot generated {model_name}!!!!!!")
