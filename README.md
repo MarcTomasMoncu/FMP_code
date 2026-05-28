@@ -4,31 +4,35 @@ This project is the practical component of the Final Master Project (FMP). Its o
 
 **PROJECT STRUCTURE**
 
-├── config.json           Centralized configuration (paths, hyperparameters)
+├── config.json               Centralized configuration (paths, hyperparameters)
 
-├── train_pipeline.py     Main experiment orchestrator
+├── train_pipeline.py         Main experiment orchestrator
 
-├── preprocessing.py      Data cleaning, normalization, and balancing (SMOTE)
+├── preprocessing.py          Data cleaning, normalization, and balancing (SMOTE)
 
-├── interpretability.py   Explainability analysis using SHAP
+├── interpretability.py       Explainability analysis using SHAP
 
-├── models/               Model definition package
+├── descriptive_analysis.py   Perform a descriptive analysis of the variables
 
-│   ├── **init**.py
+├── requirements.txt          Control version of the packages
 
-│   ├── ml_models.py      Classical models (RF, XGB, SVC, QDA...)
-
-│   └── dl_models.py      Dense Neural Network (DNN) with TensorFlow/Keras
-
-├── utils/                Statistical utilities
+├── models/                   Model definition package
 
 │   ├── **init**.py
 
-│   └── metrics.py        Metrics calculation and threshold optimization
+│   ├── ml_models.py          Classical models (RF, XGB, SVC, QDA...)
 
-├── results/              Output: SHAP plots and CSV reports (automatically generated)
+│   └── dl_models.py          Dense Neural Network (DNN) with TensorFlow/Keras
 
-└── artifacts/            Output: Trained models (.pkl / .keras) (automatically generated)
+├── utils/                    Statistical utilities
+
+│   ├── **init**.py
+
+│   └── metrics.py            Metrics calculation and threshold optimization
+
+├── results/                  Output: SHAP plots and CSV reports (automatically generated)
+
+└── artifacts/                Output: Trained models (.pkl / .keras) (automatically generated)
 
 **INSTALLATION AND SETUP**
 
@@ -59,3 +63,15 @@ In the results folder, the following are automatically generated:
 2. cross_validation_results.csv: Training robustness statistics.
 
 3. SHAP plots: Visualization of feature importance (risk factors) for tree-based models.
+
+**EXTRA ANALYSIS**
+
+If a descriptive analysis is required, you should run the descriptive_analysis.py script from your terminal using the following command:
+
+   $python3 descriptive_analysis.py
+
+Once executed, two PNG images will be generated and saved directly into the results/ folder:
+
+1. general descriptive summary of the dataset.
+
+2. comparative summary stratifying the data by infection vs. non-infection.
