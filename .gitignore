@@ -40,3 +40,8 @@ build/
 
 ### LOGS ###
 *.log
+
+# For the descriptive analysis
+*.pdf
+*.png
+*.html
