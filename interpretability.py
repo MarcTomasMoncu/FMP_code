@@ -10,8 +10,13 @@ def generate_shap_summary(model, X_test, model_name, output_path):
         explainer = shap.TreeExplainer(model) #create the model to explain for models that works with trees
         shap_values = explainer.shap_values(X_test) #here is were it goes for patients and calculate the probability of infection of each variable.
         
+        # --- CORRECCIÓ PER AL RANDOM FOREST ---
         if isinstance(shap_values, list):
-            shap_values = shap_values[1] # For binary classification, we take the SHAP values for the positive classfor random forest
+            # Per a classificació binària en versions antigues, agafem la classe positiva
+            shap_values = shap_values[1] 
+        elif isinstance(shap_values, np.ndarray) and len(shap_values.shape) == 3:
+            # Si és un array 3D (mostres, variables, classes), s'ha d'agafar la classe positiva [:, :, 1]
+            shap_values = shap_values[:, :, 1]
             
         plt.figure(figsize=(10, 8))
         shap.summary_plot(shap_values, X_test, plot_type="dot", max_display=20, show=False) #generate graph with a maximum of 20 variables
@@ -35,6 +40,11 @@ def generate_shap_dnn(model, X_train, X_test, model_name, output_path):
             shap_v = shap_values[0]
         else:
             shap_v = shap_values
+
+        # --- CORRECCIÓ PER A LA DNN ---
+        # Si l'array té forma (mostres, variables, 1), eliminem la tercera dimensió residual (squeeze)
+        if isinstance(shap_v, np.ndarray) and len(shap_v.shape) == 3 and shap_v.shape[-1] == 1:
+            shap_v = np.squeeze(shap_v, axis=-1)
 
         plt.figure(figsize=(10, 8))
         shap.summary_plot(shap_v, X_test, plot_type="dot", max_display=20, show=False)
