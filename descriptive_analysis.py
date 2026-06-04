@@ -6,21 +6,21 @@ from weasyprint import HTML
 output_dir = "results"
 os.makedirs(output_dir, exist_ok=True)  
 
-
+#Is an extra script so we put manually the name of the file. 
 try:
     df = pd.read_csv("fake_dataset_v2.csv")
 except FileNotFoundError:
-    print("Error: No s'ha trobat el fitxer 'fake_dataset_v2.csv'.")
+    print("Error: No s'ha trobat el fitxer.")
     exit()
 
 df.columns = df.columns.str.strip()
 
-taula_general = df.describe().T.round(2)[["count", "mean", "std", "min", "50%", "max"]]
+taula_general = df.describe().T.round(2)[["count", "mean", "std", "min", "50%", "max"]] #create descriptive table with the variables.
 taula_per_infeccio = df.groupby("infection").mean().T.round(2)
 taula_per_infeccio.columns = ["Sense Infecció (0)", "Amb Infecció (1)"]
 
 
-def exportar_a_png(df_table, nom_fitxer, titol):
+def exportar_a_png(df_table, nom_fitxer, titol): #to create the fuction that create the png with the tables.
     fig, ax = plt.subplots(figsize=(12, len(df_table) * 0.35 + 1.5))
     ax.axis('tight')
     ax.axis('off')
