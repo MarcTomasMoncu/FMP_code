@@ -26,7 +26,7 @@ def split_and_preprocess(file_path, exclude_columns=None, target_column="infecti
         scaler = None
 
     if apply_smote:
-        smote = SMOTE(random_state=random_state)#create fictitious samples of the minority class (infections) to balance the dataset
+        smote = SMOTE(random_state=random_state)#create fictitious samples of the minority class to balance the dataset
         X_train, y_train = smote.fit_resample(X_train, y_train)
 
     return X_train, X_test, y_train, y_test, scaler, feature_names
