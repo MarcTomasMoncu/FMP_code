@@ -42,8 +42,12 @@ for v in vars_categoriques:
     total_valids = df[v].dropna().count()
     casos_actius = (df[v] == 1).sum()
     pct = (casos_actius / total_valids) * 100 if total_valids > 0 else 0
+    
+    # Clarify what the percentage represents for SEXE (1 = Women)
+    display_name = f"{v} (Active cases = 1)" if v != "SEXE" else "SEXE (Women = 1)"
+    
     rows_general.append({
-        "Variable": f"{v}",
+        "Variable": display_name,
         "Statistics": f"Cases: {casos_actius} of {total_valids} ({pct:.1f}%)"
     })
 
@@ -78,8 +82,11 @@ for v in vars_categoriques:
     c1 = (df_1[v] == 1).sum()
     p1 = (c1 / n1) * 100 if n1 > 0 else 0
     
+    # Clarify what the percentage represents for SEXE (1 = Women)
+    display_name = f"{v}" if v != "SEXE" else "SEXE (Women = 1)"
+    
     rows_infeccio.append({
-        "Variable": v,
+        "Variable": display_name,
         "No Infection (0)": f"{c0}/{n0} ({p0:.1f}%)",
         "Infection (1)": f"{c1}/{n1} ({p1:.1f}%)"
     })
@@ -87,10 +94,11 @@ for v in vars_categoriques:
 taula_infeccio_exp = pd.DataFrame(rows_infeccio)
 
 # ==============================================================================
-# 3. FUNCTION TO EXPORT FORMATTED TABLES TO PNG
+# 3. FUNCTION TO EXPORT FORMATTED TABLES TO PNG WITH LEGENDS
 # ==============================================================================
-def exportar_a_png_millorat(df_table, nom_fitxer, titol):
-    fig, ax = plt.subplots(figsize=(14, len(df_table) * 0.4 + 1.5))
+def exportar_a_png_millorat(df_table, nom_fitxer, titol, llegenda):
+    # Adjust canvas size to fit the table and the legend below
+    fig, ax = plt.subplots(figsize=(14, len(df_table) * 0.4 + 2.0))
     ax.axis('tight')
     ax.axis('off')
     ax.set_title(titol, fontweight="bold", fontsize=15, pad=15, color="#1a365d")
@@ -110,21 +118,45 @@ def exportar_a_png_millorat(df_table, nom_fitxer, titol):
             
     table.scale(1.0, 1.5)
     
+    # Add the legend / caption at the bottom of the image
+    plt.figtext(0.1, 0.05, llegenda, fontsize=9, style='italic', color='#4a5568', wrap=True)
+    
     full_path = os.path.join(output_dir, nom_fitxer)
     plt.savefig(full_path, dpi=300, bbox_inches='tight')
     plt.close()
 
-# Exporting final results
-exportar_a_png_millorat(taula_general_exp, "taula_general_explicativa.png", "Dataset Descriptive Analysis")
-exportar_a_png_millorat(taula_infeccio_exp, "taula_infeccio_explicativa.png", "Clinical Profile by Infection Status")
+# Legends to include below the plots
+legend_general = (
+    "Note: For numerical variables, values are expressed as Mean ± Standard Deviation (Median).\n"
+    "For categorical variables, values represent the count of active cases (value = 1) out of total valid entries and its percentage."
+)
 
-print("Process completed successfully! The new specialized tables have been saved in the 'results/' folder.")
+legend_comparative = (
+    "Note: Continuous clinical metrics are presented as Mean ± Standard Deviation.\n"
+    "Categorical and binary variables are displayed as active counts / cohort totals (Percentage of positive cases)."
+)
+
+# Exporting final descriptive and comparative results
+exportar_a_png_millorat(
+    taula_general_exp, 
+    "taula_general_explicativa.png", 
+    "Dataset Descriptive Analysis", 
+    legend_general
+)
+exportar_a_png_millorat(
+    taula_infeccio_exp, 
+    "taula_infeccio_explicativa.png", 
+    "Clinical Profile by Infection Status", 
+    legend_comparative
+)
+
+print("Process completed successfully! Descriptive tables saved in the 'results/' folder.")
 
 # ==============================================================================
 # ADDITIONAL ANALYSIS: 2x2 CONTINGENCY TABLE (CONFUSION MATRIX)
 # ==============================================================================
 
-# Cross-tabulate INFECCIO (True Status) vs REFERENT_ACTUAL (Current Model Model)
+# Cross-tabulate INFECCIO (True Status) vs REFERENT_ACTUAL (Current Screening Model)
 contingency_matrix = pd.crosstab(
     df["REFERENT_ACTUAL"], 
     df["INFECCIO"],
@@ -170,6 +202,9 @@ def export_contingency_2x2(df_table, nom_fitxer, titol):
             cell.set_text_props(fontweight="medium")
             
     table.scale(1.2, 2.0)
+    
+    # Add a baseline caption for the matrix
+    plt.figtext(0.1, -0.05, "Note: Values reflect patient counts across true validation vs screening classification.", fontsize=9, style='italic', color='#4a5568')
     
     full_path = os.path.join(output_dir, nom_fitxer)
     plt.savefig(full_path, dpi=300, bbox_inches='tight')

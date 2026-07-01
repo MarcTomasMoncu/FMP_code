@@ -1,0 +1,2 @@
+-XGBoost es el més extrem. Ho fà quan s'enfronta a datasets petitis o molt desbalancejats. te molta tendència al overffiting. Al 'haver de vaixar el llindar fins a zero fà que es torni totalment inútil ja que diu que tothom està malalt. 
+.DDN ja ho prediem que fallaria perquè davant de datases petits no te suficient per apendre. 
