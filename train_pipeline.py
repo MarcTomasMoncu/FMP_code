@@ -6,6 +6,7 @@ from models.ml_models import initialize_models, cross_validate_model, train_and_
 from preprocessing import split_and_preprocess
 from utils.metrics import calculate_metrics, cv_metrics_to_df, find_optimal_threshold
 from interpretability import generate_shap_summary, generate_shap_dnn 
+from imblearn.over_sampling import SMOTE  # Nova importació necessària per al model final
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -22,21 +23,26 @@ def main(config_path):
     
     os.makedirs(results_path, exist_ok=True)
     os.makedirs(artifacts_path, exist_ok=True)
-##################################################
-##################################################
-####################################################
-    X_train, X_test, y_train, y_test, scaler, feature_names = split_and_preprocess( #call the script of processing 
-######################################################
-######################################################
-###################################################
+
+    # PAS 1 CORREGIT: Cridem split_and_preprocess forçant apply_smote=False.
+    # D'aquesta manera, X_train i y_train contenen només pacients reals per a la Cross-Validation.
+    X_train, X_test, y_train, y_test, scaler, feature_names = split_and_preprocess(
         dataset_path,
         exclude_columns=config.get("exclude_columns", []),
         target_column=config["target_column"],
         test_size=config["test_size"],
         random_state=config["random_state"],
         normalize=config["normalize"],
-        apply_smote=config["apply_smote"]
+        apply_smote=False  # <-- Canviat obligatòriament a False per evitar el leakage
     )
+
+    # PAS 2 NOU: Creem el conjunt final balancejat amb SMOTE que utilitzaran els models
+    # exclusivament per a entrenar-se abans de fer les prediccions del Test set.
+    if config.get("apply_smote", True):
+        smote = SMOTE(random_state=config["random_state"])
+        X_train_final, y_train_final = smote.fit_resample(X_train, y_train)
+    else:
+        X_train_final, y_train_final = X_train.copy(), y_train.copy()
 
     combined_predictions = pd.DataFrame(y_test, columns=["True_Label"])
     combined_metrics = pd.DataFrame()
@@ -46,11 +52,14 @@ def main(config_path):
     for model_name, model in ml_models.items(): #a for to start the training for all the models defined in ml_models.py
         print(f"\nTraining for the following model: {model_name} ")
         
+        # La CV utilitza les dades NETES (X_train). El SMOTE s'executa internament fold a fold.
         cv_metrics = cross_validate_model(model, X_train.values, y_train, n_splits=config["num_cv_splits"]) #Cross-validation with 5 splits to be sure of the robustness.
         cv_results = cv_metrics_to_df(model_name, cv_metrics, cv_results) #store nfo in the scv
 
         model_file = os.path.join(artifacts_path, model_name + ".pkl") #save the model in artifacts folder
-        _, y_test_pred_probs = train_and_evaluate_model(model, X_train.values, y_train, X_test.values, y_test, model_file) #traind and evaluate the model
+        
+        # CORREGIT: Entrenem el model definitiu de test amb les dades balancejades (X_train_final)
+        _, y_test_pred_probs = train_and_evaluate_model(model, X_train_final.values, y_train_final, X_test.values, y_test, model_file) #traind and evaluate the model
         
         optimal_thresh = find_optimal_threshold(y_test, y_test_pred_probs, config["target_sensitivity"]) #find optimal threshold
         ml_metrics = calculate_metrics(y_test, y_test_pred_probs, threshold=optimal_thresh) #calculate the metrics with the threshold calculated before
@@ -64,14 +73,18 @@ def main(config_path):
 
     print("\n--- Training DenseNeuralNet ---")
     dnn_model = build_dnn_model(input_dim=X_train.shape[1], dropout_rate=0.5, lr=1e-4) #build the DNN model with the parameters defined in dl_models.py
+    
+    # La CV utilitza les dades NETES (X_train). La xarxa es reiniciarà i aplicarà SMOTE internament a cada fold.
     dnn_cv_metrics = cross_validate_dnn(dnn_model, X_train.values, y_train, n_splits=config["num_cv_splits"]) #cross-validation with 5 splits
     cv_results = cv_metrics_to_df("DenseNeuralNet", dnn_cv_metrics, cv_results) #store the cross-validation results in a dataframe
 
     model_file = os.path.join(artifacts_path, "DenseNeuralNet.keras") #save the DNN model in artifacts folder
-    _, y_test_pred_probs = train_and_evaluate_dnn(dnn_model, X_train.values, y_train, X_test.values, y_test, model_file) #train and evaluate the DNN model
+    
+    # CORREGIT: Entrenem la xarxa neural definitiva de test amb les dades balancejades (X_train_final)
+    _, y_test_pred_probs = train_and_evaluate_dnn(dnn_model, X_train_final.values, y_train_final, X_test.values, y_test, model_file) #train and evaluate the DNN model
     
     print(f"Generating SHAP for DenseNeuralNet...")
-    generate_shap_dnn(dnn_model, X_train, X_test, "DenseNeuralNet", results_path) #generate the SHAP summary plot for the DNN model
+    generate_shap_dnn(dnn_model, X_train_final, X_test, "DenseNeuralNet", results_path) #generate the SHAP summary plot for the DNN model
 
     optimal_thresh_dnn = find_optimal_threshold(y_test, y_test_pred_probs, config["target_sensitivity"]) #find the optimal threshold for the DNN model
     dnn_metrics = calculate_metrics(y_test, y_test_pred_probs, threshold=optimal_thresh_dnn) #calculate the metrics for the DNN model with the threshold that we calculated before
