@@ -8,9 +8,9 @@ from utils.metrics import calculate_metrics
 
 def initialize_models(): #function to initialize the machine learning models that will be trained and evaluated in the pipeline, returning a dictionary with the model names as keys and the initialized model objects as values
     return {
-        "BernoulliNB": naive_bayes.BernoulliNB(), 
-        "DecisionTreeClassifier": tree.DecisionTreeClassifier(max_depth=3), 
-        "SVC": svm.SVC(probability=True),
+        #"BernoulliNB": naive_bayes.BernoulliNB(), 
+        #"DecisionTreeClassifier": tree.DecisionTreeClassifier(max_depth=3), 
+        #"SVC": svm.SVC(probability=True),
         "QuadraticDiscriminantAnalysis": discriminant_analysis.QuadraticDiscriminantAnalysis(reg_param=0.1),
         "RandomForestClassifier": RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42),
         "XGBClassifier": XGBClassifier(learning_rate=0.1, max_depth=3)
