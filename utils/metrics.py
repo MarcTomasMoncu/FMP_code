@@ -23,7 +23,14 @@ def calculate_metrics(y_true, y_pred_probs, threshold=0.5): #function to calcula
         'roc_auc': roc_auc_score(y_true, y_pred_probs),
         'specificity': tn / (tn + fp) if (tn + fp) > 0 else 0,
         'npv': tn / (tn + fn) if (tn + fn) > 0 else 0,
-        'ppv': tp / (tp + fp) if (tp + fp) > 0 else 0
+        'ppv': tp / (tp + fp) if (tp + fp) > 0 else 0,
+        
+        # -----------------------------------------------------------------
+        # NOVES MÈTRIQUES EN NÚMEROS ABSOLUTS (Afegides per control clínic)
+        # -----------------------------------------------------------------
+        'total_infectats_reals': int(tp + fn),              # Total de pacients que realment estan infectats al Test Set
+        'marcats_com_positius': int(tp + fp),               # Quants pacients totals el model ha etiquetat com a "positius"
+        'infeccions_no_detectades_errors': int(fn)          # Quants infectats reals s'han escapat (Falsos Negatius)
     }
     return metrics
 
