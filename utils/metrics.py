@@ -15,6 +15,10 @@ def calculate_metrics(y_true, y_pred_probs, threshold=0.5): #function to calcula
     y_pred_labels = (y_pred_probs >= threshold).astype(int) 
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred_labels).ravel() #calculate the confusion matrix and extract true negatives, false positives, false negatives and true positives
     
+    # Càlcul de totals previs per facilitar els percentatges
+    total_pacients = int(tn + fp + fn + tp)
+    total_infectats = int(tp + fn)
+    
     metrics = { 
         'threshold_used': threshold,
         'accuracy': accuracy_score(y_true, y_pred_labels),
@@ -25,12 +29,16 @@ def calculate_metrics(y_true, y_pred_probs, threshold=0.5): #function to calcula
         'npv': tn / (tn + fn) if (tn + fn) > 0 else 0,
         'ppv': tp / (tp + fp) if (tp + fp) > 0 else 0,
         
+        # Valors absoluts
+        'total_infectats_reals': total_infectats,
+        'marcats_com_positius': int(tp + fp),
+        'infeccions_no_detectades_errors': int(fn),
+        
         # -----------------------------------------------------------------
-        # NOVES MÈTRIQUES EN NÚMEROS ABSOLUTS (Afegides per control clínic)
+        # NOVES COLUMNES: Percentatges (Més context clínic)
         # -----------------------------------------------------------------
-        'total_infectats_reals': int(tp + fn),              # Total de pacients que realment estan infectats al Test Set
-        'marcats_com_positius': int(tp + fp),               # Quants pacients totals el model ha etiquetat com a "positius"
-        'infeccions_no_detectades_errors': int(fn)          # Quants infectats reals s'han escapat (Falsos Negatius)
+        'pct_marcats_com_positius': (int(tp + fp) / total_pacients * 100) if total_pacients > 0 else 0,   # % de població total alertada
+        'pct_infeccions_no_detectades_errors': (int(fn) / total_infectats * 100) if total_infectats > 0 else 0 # % de malalts reals que s'han escapat
     }
     return metrics
 
