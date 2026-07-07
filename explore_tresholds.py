@@ -70,22 +70,26 @@ def main(config_path):
 
     # 4. Càlcul de mètriques avançant cada 0.1 de Sensibilitat (Recall)
     target_sensitivities = np.linspace(0.0, 1.0, 11)  # [0.0, 0.1, 0.2, ..., 1.0]
-    threshold_grid = np.linspace(1.0, 0.0, 201)       # Graella per buscar el llindar ideal
+    threshold_grid = np.linspace(1.0, 0.0, 201)       # Graella de precisió per al llindar
     
     plot_data = {}
-    csv_rows = []  # Llista on guardarem les files per generar el CSV final
+    csv_rows = []
+
+    # Totals de referència del conjunt de test per calcular els %
+    total_pacients = len(y_test)
+    total_infectats_reals = int(y_test.sum())
 
     for model_name, y_prob in predictions_probs.items():
         model_results = {
-            "sens_eix_x": [], "threshold": [], "actual_recall": [], 
-            "specificity": [], "positives_count": [], "false_negatives": []
+            "sens_eix_x": [], "threshold": [], "actual_recall": [], "specificity": [], 
+            "pct_positives": [], "pct_false_negatives": []  # Guardarem percentatges per al gràfic
         }
         
         for target_sens in target_sensitivities:
             chosen_thresh = 0.0
             chosen_rec = 1.0
             chosen_spec = 0.0
-            chosen_pos = len(y_test)
+            chosen_pos = total_pacients
             chosen_fn = 0
             
             for thresh in threshold_grid:
@@ -104,15 +108,19 @@ def main(config_path):
                     chosen_fn = int(fn)
                     break
             
-            # Guardem per a la gràfica
+            # Càlcul de percentatges clau
+            pct_marcats = (chosen_pos / total_pacients * 100) if total_pacients > 0 else 0
+            pct_errors = (chosen_fn / total_infectats_reals * 100) if total_infectats_reals > 0 else 0
+
+            # Guardem les estructures per al gràfic
             model_results["sens_eix_x"].append(target_sens)
             model_results["threshold"].append(chosen_thresh)
             model_results["actual_recall"].append(chosen_rec)
             model_results["specificity"].append(chosen_spec)
-            model_results["positives_count"].append(chosen_pos)
-            model_results["false_negatives"].append(chosen_fn)
+            model_results["pct_positives"].append(pct_marcats)
+            model_results["pct_false_negatives"].append(pct_errors)
             
-            # Guardem per al fitxer CSV estructurat
+            # Guardem per al fitxer CSV (amb columnes absolutes i columnes de %)
             csv_rows.append({
                 "Model": model_name,
                 "Sensibilitat_Objectiu": round(target_sens, 1),
@@ -120,19 +128,21 @@ def main(config_path):
                 "Sensibilitat_Real_Obtinguda": round(chosen_rec, 4),
                 "Especificitat_Obtinguda": round(chosen_spec, 4),
                 "Casos_Marcats_Com_Positius": chosen_pos,
-                "Infeccions_No_Detectades_Errors": chosen_fn
+                "Pct_Marcats_Com_Positius": round(pct_marcats, 2),
+                "Infeccions_No_Detectades_Errors": chosen_fn,
+                "Pct_Infeccions_No_Detectades_Errors": round(pct_errors, 2)
             })
             
         plot_data[model_name] = model_results
 
-    # 5. CREACIÓ I EXPORTACIÓ DEL FITXER CSV
+    # 5. Exportar les mètriques i percentatges a CSV
     df_metrics = pd.DataFrame(csv_rows)
     output_csv_path = os.path.join(results_path, "exploracio_sensibilitat_metrics.csv")
     df_metrics.to_csv(output_csv_path, index=False, sep=",")
-    print(f"\n[OK] Fitxer CSV amb les mètriques desat a: {output_csv_path}")
+    print(f"\n[OK] Fitxer CSV desat amb percentatges a: {output_csv_path}")
 
-    # 6. Generar l'únic gràfic comparatiu
-    print("Generant gràfic d'exploració amb Falsos Negatius...")
+    # 6. Generar el gràfic net (sense números absoluts, només % a l'eix dret)
+    print("Generant gràfic d'exploració basat en Percentatges (%) ...")
     n_models = len(plot_data)
     fig, axes = plt.subplots(n_models, 1, figsize=(11, 4.5 * n_models), sharex=True)
     
@@ -140,25 +150,26 @@ def main(config_path):
         axes = [axes]
         
     for ax, (model_name, data) in zip(axes, plot_data.items()):
-        # Eix esquerre per a ràtios i llindars (0 a 1)
+        # Eix esquerre: Ràtios (0 a 1)
         ax.plot(data["sens_eix_x"], data["threshold"], label="Llindar (Threshold)", color="blue", marker="o")
         ax.plot(data["sens_eix_x"], data["actual_recall"], label="Recall (Sensibilitat)", color="green", linestyle="--", marker="s")
         ax.plot(data["sens_eix_x"], data["specificity"], label="Especificitat", color="red", marker="^")
         
-        ax.set_ylabel("Valor Ràtios (0 - 1)", color="black")
-        ax.set_title(f"Exploració de Llindars i Errors - {model_name}")
+        ax.set_ylabel("Valor Ràtios (0.0 - 1.0)", color="black")
+        ax.set_title(f"Exploració de Llindars i Impacte Clínic - {model_name}")
         ax.grid(True, linestyle=":", alpha=0.6)
         ax.set_ylim(-0.05, 1.05)
         
-        # Eix dret secundari per als números absoluts (Casos totals i Casos fallats)
+        # Eix dret: Únicament Percentatges (0% a 100%)
         ax2 = ax.twinx()
-        ax2.plot(data["sens_eix_x"], data["positives_count"], label="Casos Marcats com Positius (Totals)", color="purple", linestyle="-.", marker="d")
-        ax2.plot(data["sens_eix_x"], data["false_negatives"], label="Infeccions NO Detectades (Errors)", color="orange", linestyle=":", marker="x", markersize=8, linewidth=2)
+        ax2.plot(data["sens_eix_x"], data["pct_positives"], label="% Casos Marcats com Positius", color="purple", linestyle="-.", marker="d")
+        ax2.plot(data["sens_eix_x"], data["pct_false_negatives"], label="% Infeccions NO Detectades (Errors)", color="orange", linestyle=":", marker="x", markersize=8, linewidth=2)
         
-        ax2.set_ylabel("Núm. Pacients (Valors Absoluts)", color="black")
+        ax2.set_ylabel("Escala de Percentatges (%)", color="black")
         ax2.tick_params(axis='y', labelcolor="black")
+        ax2.set_ylim(-5, 105) # Forcem els topalls de percentatge per netedat visual
         
-        # Fusionar les llegendes d'ambdós eixos
+        # Unificar les dues llegendes en una sola caixa lateral
         lines, labels = ax.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax.legend(lines + lines2, labels + labels2, loc="center left")
@@ -167,10 +178,10 @@ def main(config_path):
     plt.xticks(target_sensitivities)
     plt.tight_layout()
     
-    # Desar la imatge
+    # Desar el gràfic final
     output_plot_path = os.path.join(results_path, "exploracio_sensibilitat_llindar.png")
     plt.savefig(output_plot_path, dpi=300)
-    print(f"[OK] Gràfic completat correctament a: {output_plot_path}")
+    print(f"[OK] Gràfic de percentatges completat a: {output_plot_path}")
     plt.show()
 
 if __name__ == "__main__":
