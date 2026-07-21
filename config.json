@@ -22,7 +22,8 @@
         "REINTERVENCIO",
         "REINTERVENCIO_DESC",
         "REFERENT_ACTUAL",
-        "SEXE_LLETRES"
+        "SEXE_LLETRES",
+        "RN"
     ],
     "test_size": 0.2,
     "random_state": 42,
