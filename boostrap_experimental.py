@@ -346,4 +346,4 @@ def main(config_path, n_bootstraps=100):
 
 if __name__ == "__main__":
     config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "config.json"))
-    main(config_path, n_bootstraps=50)
+    main(config_path, n_bootstraps=100)
