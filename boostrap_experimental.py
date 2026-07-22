@@ -1,5 +1,5 @@
 import os
-# Silenciar avisos informatius de TensorFlow (CUDA / AVX)
+#to hide warnings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import json
@@ -21,18 +21,14 @@ from sklearn.metrics import (
 from sklearn.utils import resample
 from imblearn.over_sampling import SMOTE
 
-# Importacions del teu projecte
 from preprocessing import split_and_preprocess
 from models.dl_models import build_dnn_model
 
 warnings.filterwarnings("ignore")
 
-# ==========================================
-# 1. CÀLCUL DE MÈTRIQUES CLÍNIQUES
-# ==========================================
+# Metric calculations
 
 def calcular_metriques_cliniques_completes(y_true, y_prob, threshold):
-    """Calcula les mètriques d'avaluació per a un llindar determinat."""
     y_pred = (y_prob >= threshold).astype(int)
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
     
@@ -75,12 +71,9 @@ def calcular_metriques_cliniques_completes(y_true, y_prob, threshold):
         "Infeccions_Perdudes": fn
     }
 
-# ==========================================
-# 2. CERCA DE LLINDARS OPTIMITZATS
-# ==========================================
+# search of the optimal thresholds for the three requested criteria
 
 def trobar_llindars_optimitzats(y_true, y_prob):
-    """Troba els llindars segons els 3 criteris sol·licitats."""
     threshold_grid = np.linspace(0.0, 1.0, 501)
     
     best_t_sens, best_spec_for_sens = 0.5, -1.0
@@ -114,12 +107,9 @@ def trobar_llindars_optimitzats(y_true, y_prob):
         "Youden": best_t_youden
     }
 
-# ==========================================
-# 3. ENTRENAMENT DELS MODELS (CORREGIT)
-# ==========================================
+# model training and prediction function with class weighting for imbalanced datasets
 
 def entrenar_i_predir(model_name, tractament, X_train_tr, y_train_tr, X_eval, random_state=42):
-    """Entrena el model en X_train_tr i torna les probabilitats predites en X_eval."""
     n_neg = np.sum(y_train_tr == 0)
     n_pos = np.sum(y_train_tr == 1)
     scale_pos_weight = n_neg / n_pos if n_pos > 0 else 1.0
@@ -131,7 +121,6 @@ def entrenar_i_predir(model_name, tractament, X_train_tr, y_train_tr, X_eval, ra
         return model.predict_proba(X_eval)[:, 1]
 
     elif model_name == "QuadraticDiscriminantAnalysis":
-        # Correcció: QDA aplica la ponderació mitjançant priors igualades [0.5, 0.5]
         priors_opt = [0.5, 0.5] if tractament == "Ponderacio" else None
         model = QuadraticDiscriminantAnalysis(reg_param=0.1, priors=priors_opt)
         model.fit(X_train_tr, y_train_tr)
@@ -164,9 +153,7 @@ def entrenar_i_predir(model_name, tractament, X_train_tr, y_train_tr, X_eval, ra
     else:
         raise ValueError(f"Model no reconegut: {model_name}")
 
-# ==========================================
-# 4. PIPELINE BOOTSTRAP AMB CORRECCIÓ D'OPTIMISME
-# ==========================================
+# Boostraping loop to estimate optimism and correct performance metrics
 
 def main(config_path, n_bootstraps=100):
     with open(config_path, "r") as f:
@@ -197,9 +184,7 @@ def main(config_path, n_bootstraps=100):
     tractaments_list = ["Sense_Tractament", "Ponderacio", "SMOTE"]
     criteris_llindar = ["Sensibilitat_0.8", "MCC", "Youden"]
 
-    # =======================================================
-    # A. MESURAR EL RENDIMENT ORIGINAL EN DADES SENSE REEMPLAÇAMENT
-    # =======================================================
+    # mesuring the original performance on the training data without replacement
     print("\n--- 2. Calculant el rendiment original aparent ---")
     rendiment_original = {}
 
@@ -224,9 +209,7 @@ def main(config_path, n_bootstraps=100):
                 m_orig["Llindar_Aplicat"] = t_orig
                 rendiment_original[(model_name, tractament, criteri)] = m_orig
 
-    # =======================================================
-    # B. BUCLE BOOTSTRAP PER MÈTODE D'OPTIMISME
-    # =======================================================
+    # boostrapwith the same model and treatment to estimate optimism
     print(f"\n--- 3. Executant Bootstrap ({n_bootstraps} iteracions) per calcular l'optimisme ---")
     optimisme_raw = []
 
@@ -234,7 +217,6 @@ def main(config_path, n_bootstraps=100):
         if (b + 1) % 10 == 0 or b == 0:
             print(f"Ronda Bootstrap {b + 1}/{n_bootstraps}...")
 
-        # Generar mostra Bootstrap X_boot a partir de X_train
         X_boot, y_boot = resample(
             X_train, y_train, 
             replace=True, 
@@ -253,7 +235,7 @@ def main(config_path, n_bootstraps=100):
                 X_tr_boot, y_tr_boot = X_boot.copy(), y_boot.copy()
 
             for model_name in models_list:
-                # 1. Avaluar en la mostra Bootstrap (Perform_boot)
+                # evaluate the model on the bootstrap sample (Perform_boot)
                 y_prob_on_boot = entrenar_i_predir(
                     model_name, tractament, 
                     X_tr_boot, y_tr_boot, X_boot, 
@@ -261,7 +243,7 @@ def main(config_path, n_bootstraps=100):
                 )
                 llindars_boot = trobar_llindars_optimitzats(y_boot, y_prob_on_boot)
 
-                # 2. Avaluar EL MATEIX MODEL en les dades originals X_train (Perform_orig)
+                #evaluate the model on the original training data (Perform_orig)
                 y_prob_on_orig = entrenar_i_predir(
                     model_name, tractament, 
                     X_tr_boot, y_tr_boot, X_train, 
@@ -271,12 +253,10 @@ def main(config_path, n_bootstraps=100):
                 for criteri in criteris_llindar:
                     t_b = llindars_boot[criteri]
                     
-                    # Rendiment en Bootstrap
+
                     m_boot = calcular_metriques_cliniques_completes(y_boot, y_prob_on_boot, t_b)
-                    # Rendiment en dades originals
                     m_orig_test = calcular_metriques_cliniques_completes(y_train, y_prob_on_orig, t_b)
 
-                    # Optimisme = Perform_boot - Perform_orig
                     dict_opt = {
                         "Model": model_name,
                         "Tractament": tractament,
@@ -288,9 +268,7 @@ def main(config_path, n_bootstraps=100):
 
                     optimisme_raw.append(dict_opt)
 
-    # =======================================================
-    # C. AGREGACIÓ I CORRECCIÓ D'OPTIMISME
-    # =======================================================
+    #Agregation and correction of optimism
     df_opt = pd.DataFrame(optimisme_raw)
     cols_metriques = [
         "AUROC", "AUPRC", "TP", "FP", "TN", "FN",
@@ -314,10 +292,8 @@ def main(config_path, n_bootstraps=100):
             opt_vals = group[col].values
             mean_opt = np.mean(opt_vals)
             
-            # Valor Corregit = Valor Original Aparent - Optimisme Mitjà
             val_corregit = orig_m[col] - mean_opt
             
-            # IC 95%
             ic_inf = np.percentile(orig_m[col] - opt_vals, 2.5)
             ic_sup = np.percentile(orig_m[col] - opt_vals, 97.5)
 
