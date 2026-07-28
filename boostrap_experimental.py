@@ -1,5 +1,5 @@
 import os
-#to hide warnings
+# To hide warnings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import json
@@ -28,9 +28,10 @@ from models.dl_models import build_dnn_model
 
 warnings.filterwarnings("ignore")
 
-# Metric calculations
-
-def calcular_metriques_cliniques_completes(y_true, y_prob, threshold):
+# ==========================================
+# 1. METRICS CALCULATION
+# ==========================================
+def calculate_complete_clinical_metrics(y_true, y_prob, threshold):
     y_pred = (y_prob >= threshold).astype(int)
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
     
@@ -41,11 +42,11 @@ def calcular_metriques_cliniques_completes(y_true, y_prob, threshold):
     npv = tn / (tn + fn) if (tn + fn) > 0 else 0.0
     mcc = matthews_corrcoef(y_true, y_pred)
     
-    marcats_revisio = fp + tp
-    pct_marcats = (marcats_revisio / total) * 100.0 if total > 0 else 0.0
+    flagged_for_review = fp + tp
+    pct_flagged = (flagged_for_review / total) * 100.0 if total > 0 else 0.0
     
-    evitats_revisio = tn + fn
-    pct_evitats = (evitats_revisio / total) * 100.0 if total > 0 else 0.0
+    avoided_review = tn + fn
+    pct_avoided = (avoided_review / total) * 100.0 if total > 0 else 0.0
     
     try:
         auroc = roc_auc_score(y_true, y_prob)
@@ -61,21 +62,22 @@ def calcular_metriques_cliniques_completes(y_true, y_prob, threshold):
         "FP": fp,
         "TN": tn,
         "FN": fn,
-        "Sensibilitat": sens,
-        "Especificitat": spec,
+        "Sensitivity": sens,
+        "Specificity": spec,
         "PPV": ppv,
         "NPV": npv,
         "MCC": mcc,
-        "Pacients_Marcats": marcats_revisio,
-        "Pct_Marcats": pct_marcats,
-        "Pacients_Evitats": evitats_revisio,
-        "Pct_Evitats": pct_evitats,
-        "Infeccions_Perdudes": fn
+        "Patients_Flagged": flagged_for_review,
+        "Pct_Flagged": pct_flagged,
+        "Patients_Avoided": avoided_review,
+        "Pct_Avoided": pct_avoided,
+        "Missed_Infections": fn
     }
 
-# search of the optimal thresholds for the three requested criteria
-
-def trobar_llindars_optimitzats(y_true, y_prob):
+# ==========================================
+# 2. OPTIMAL THRESHOLDS SEARCH
+# ==========================================
+def find_optimized_thresholds(y_true, y_prob):
     threshold_grid = np.linspace(0.0, 1.0, 501)
     
     best_t_sens, best_spec_for_sens = 0.5, -1.0
@@ -104,45 +106,46 @@ def trobar_llindars_optimitzats(y_true, y_prob):
             best_t_youden = t
             
     return {
-        "Sensibilitat_0.8": best_t_sens,
+        "Sensitivity_0.8": best_t_sens,
         "MCC": best_t_mcc,
         "Youden": best_t_youden
     }
 
-# model training and prediction function with class weighting for imbalanced datasets
-
-def entrenar_i_predir(model_name, tractament, X_train_tr, y_train_tr, X_eval, random_state=42):
+# ==========================================
+# 3. MODEL TRAINING AND PREDICTION
+# ==========================================
+def train_and_predict(model_name, treatment, X_train_tr, y_train_tr, X_eval, random_state=42):
     n_neg = np.sum(y_train_tr == 0)
     n_pos = np.sum(y_train_tr == 1)
     scale_pos_weight = n_neg / n_pos if n_pos > 0 else 1.0
 
-    if model_name == "RegressioLogisticaPenalitzada":
-        cw = 'balanced' if tractament == "Ponderacio" else None
+    if model_name == "PenalizedLogisticRegression":
+        cw = 'balanced' if treatment == "Class_Weighting" else None
         model = LogisticRegression(penalty='l2', C=1.0, class_weight=cw, random_state=random_state)
         model.fit(X_train_tr, y_train_tr)
         return model.predict_proba(X_eval)[:, 1]
 
-    elif model_name == "QuadraticDiscriminantAnalysis":
-        priors_opt = [0.5, 0.5] if tractament == "Ponderacio" else None
+    elif model_name == "QDA":
+        priors_opt = [0.5, 0.5] if treatment == "Class_Weighting" else None
         model = QuadraticDiscriminantAnalysis(reg_param=0.1, priors=priors_opt)
         model.fit(X_train_tr, y_train_tr)
         return model.predict_proba(X_eval)[:, 1]
 
-    elif model_name == "RandomForestClassifier":
-        cw = 'balanced' if tractament == "Ponderacio" else None
+    elif model_name == "RandomForest":
+        cw = 'balanced' if treatment == "Class_Weighting" else None
         model = RandomForestClassifier(n_estimators=100, max_depth=5, class_weight=cw, random_state=random_state)
         model.fit(X_train_tr, y_train_tr)
         return model.predict_proba(X_eval)[:, 1]
 
-    elif model_name == "XGBClassifier":
-        spw = scale_pos_weight if tractament == "Ponderacio" else 1.0
+    elif model_name == "XGBoost":
+        spw = scale_pos_weight if treatment == "Class_Weighting" else 1.0
         model = XGBClassifier(learning_rate=0.1, max_depth=3, scale_pos_weight=spw, random_state=random_state)
         model.fit(X_train_tr, y_train_tr)
         return model.predict_proba(X_eval)[:, 1]
 
-    elif model_name == "DenseNeuralNet":
+    elif model_name == "DNN":
         dnn_model = build_dnn_model(input_dim=X_train_tr.shape[1], dropout_rate=0.5, lr=1e-4)
-        cw_dict = {0: 1.0, 1: float(scale_pos_weight)} if tractament == "Ponderacio" else None
+        cw_dict = {0: 1.0, 1: float(scale_pos_weight)} if treatment == "Class_Weighting" else None
         
         dnn_model.fit(
             X_train_tr, y_train_tr, 
@@ -153,10 +156,11 @@ def entrenar_i_predir(model_name, tractament, X_train_tr, y_train_tr, X_eval, ra
         return dnn_model.predict(X_eval, verbose=0).flatten()
 
     else:
-        raise ValueError(f"Model no reconegut: {model_name}")
+        raise ValueError(f"Model not recognized: {model_name}")
 
-# Boostraping loop to estimate optimism and correct performance metrics
-
+# ==========================================
+# 4. BOOTSTRAP MAIN PIPELINE
+# ==========================================
 def main(config_path, n_bootstraps=100):
     with open(config_path, "r") as f:
         config = json.load(f)
@@ -164,7 +168,7 @@ def main(config_path, n_bootstraps=100):
     base_dir = os.path.dirname(config_path)
     dataset_path = os.path.join(base_dir, config["dataset_path"])
     
-    print("--- 1. Carregant dades originals ---")
+    print("--- 1. Loading original dataset ---")
     X_train, X_test, y_train, y_test, _, _ = split_and_preprocess(
         dataset_path,
         exclude_columns=config.get("exclude_columns", []),
@@ -175,63 +179,64 @@ def main(config_path, n_bootstraps=100):
         apply_smote=False
     )
 
-    models_list = [
-        "RegressioLogisticaPenalitzada",
-        "QuadraticDiscriminantAnalysis",
-        "RandomForestClassifier",
-        "XGBClassifier",
-        "DenseNeuralNet"
-    ]
-    
-    tractaments_list = ["Sense_Tractament", "Ponderacio", "SMOTENC"]
-    criteris_llindar = ["Sensibilitat_0.8", "MCC", "Youden"]
+    models_list = ["PenalizedLogisticRegression", "QDA", "RandomForest", "XGBoost", "DNN"]
+    treatments_list = ["No_Treatment", "Class_Weighting", "SMOTENC"]
+    threshold_criteria = ["Sensitivity_0.8", "MCC", "Youden"]
 
-    # ==============================
-    # SETUP FOR ROC CURVES PLOTTING
-    # ==============================
+    # Configuration for ROC Curves
     configs_to_plot = [
-        ("RegressioLogisticaPenalitzada", "Sense_Tractament"),
-        ("QuadraticDiscriminantAnalysis", "Ponderacio"),
-        ("RandomForestClassifier", "Sense_Tractament"),
-        ("XGBClassifier", "Ponderacio"),
-        ("DenseNeuralNet", "SMOTENC")
+        ("PenalizedLogisticRegression", "No_Treatment"),
+        ("QDA", "Class_Weighting"),
+        ("RandomForest", "No_Treatment"),
+        ("XGBoost", "Class_Weighting"),
+        ("DNN", "SMOTENC")
     ]
     
+    # Dictionary for pretty-printing in the plot
+    friendly_names = {
+        "PenalizedLogisticRegression": "Penalized Logistic Reg.",
+        "QDA": "QDA",
+        "RandomForest": "Random Forest",
+        "XGBoost": "XGBoost",
+        "DNN": "DNN",
+        "No_Treatment": "No Treatment",
+        "Class_Weighting": "Class Weighting",
+        "SMOTENC": "SMOTENC"
+    }
+
     roc_data = {cfg: [] for cfg in configs_to_plot}
-    mean_fpr = np.linspace(0, 1, 100) # Base FPR to interpolate TPRs
+    mean_fpr = np.linspace(0, 1, 100)
 
-    # mesuring the original performance on the training data without replacement
-    print("\n--- 2. Calculant el rendiment original aparent ---")
-    rendiment_original = {}
+    print("\n--- 2. Calculating apparent original performance ---")
+    original_performance = {}
 
-    for tractament in tractaments_list:
-        if tractament == "SMOTENC":
+    for treatment in treatments_list:
+        if treatment == "SMOTENC":
             smote = SMOTE(random_state=config["random_state"])
             X_tr_orig, y_tr_orig = smote.fit_resample(X_train, y_train)
         else:
             X_tr_orig, y_tr_orig = X_train.copy(), y_train.copy()
 
         for model_name in models_list:
-            y_prob_orig = entrenar_i_predir(
-                model_name, tractament, 
+            y_prob_orig = train_and_predict(
+                model_name, treatment, 
                 X_tr_orig, y_tr_orig, X_train, 
                 random_state=config["random_state"]
             )
-            llindars_orig = trobar_llindars_optimitzats(y_train, y_prob_orig)
+            orig_thresholds = find_optimized_thresholds(y_train, y_prob_orig)
 
-            for criteri in criteris_llindar:
-                t_orig = llindars_orig[criteri]
-                m_orig = calcular_metriques_cliniques_completes(y_train, y_prob_orig, t_orig)
-                m_orig["Llindar_Aplicat"] = t_orig
-                rendiment_original[(model_name, tractament, criteri)] = m_orig
+            for criterion in threshold_criteria:
+                t_orig = orig_thresholds[criterion]
+                m_orig = calculate_complete_clinical_metrics(y_train, y_prob_orig, t_orig)
+                m_orig["Applied_Threshold"] = t_orig
+                original_performance[(model_name, treatment, criterion)] = m_orig
 
-    # boostrapwith the same model and treatment to estimate optimism
-    print(f"\n--- 3. Executant Bootstrap ({n_bootstraps} iteracions) per calcular l'optimisme i extreure ROCs ---")
-    optimisme_raw = []
+    print(f"\n--- 3. Running Bootstrap ({n_bootstraps} iterations) for optimism correction and ROCs ---")
+    raw_optimism = []
 
     for b in range(n_bootstraps):
         if (b + 1) % 10 == 0 or b == 0:
-            print(f"Ronda Bootstrap {b + 1}/{n_bootstraps}...")
+            print(f"Bootstrap Round {b + 1}/{n_bootstraps}...")
 
         X_boot, y_boot = resample(
             X_train, y_train, 
@@ -240,8 +245,8 @@ def main(config_path, n_bootstraps=100):
             random_state=config["random_state"] + b
         )
 
-        for tractament in tractaments_list:
-            if tractament == "SMOTENC":
+        for treatment in treatments_list:
+            if treatment == "SMOTENC":
                 try:
                     smote = SMOTE(random_state=config["random_state"] + b)
                     X_tr_boot, y_tr_boot = smote.fit_resample(X_boot, y_boot)
@@ -251,49 +256,50 @@ def main(config_path, n_bootstraps=100):
                 X_tr_boot, y_tr_boot = X_boot.copy(), y_boot.copy()
 
             for model_name in models_list:
-                # evaluate the model on the bootstrap sample (Perform_boot)
-                y_prob_on_boot = entrenar_i_predir(
-                    model_name, tractament, 
+                # 1. Model evaluated on bootstrap sample
+                y_prob_on_boot = train_and_predict(
+                    model_name, treatment, 
                     X_tr_boot, y_tr_boot, X_boot, 
                     random_state=config["random_state"] + b
                 )
-                llindars_boot = trobar_llindars_optimitzats(y_boot, y_prob_on_boot)
+                boot_thresholds = find_optimized_thresholds(y_boot, y_prob_on_boot)
 
-                #evaluate the model on the original training data (Perform_orig)
-                y_prob_on_orig = entrenar_i_predir(
-                    model_name, tractament, 
+                # 2. Model evaluated on original sample
+                y_prob_on_orig = train_and_predict(
+                    model_name, treatment, 
                     X_tr_boot, y_tr_boot, X_train, 
                     random_state=config["random_state"] + b
                 )
                 
-                # EXTRACT ROC DATA FOR THE SPECIFIED CONFIGS
-                if (model_name, tractament) in configs_to_plot:
+                # Extract ROC for selected configs
+                if (model_name, treatment) in configs_to_plot:
                     fpr, tpr, _ = roc_curve(y_train, y_prob_on_orig)
                     interp_tpr = np.interp(mean_fpr, fpr, tpr)
-                    interp_tpr[0] = 0.0 # TPR is 0 when FPR is 0
-                    roc_data[(model_name, tractament)].append(interp_tpr)
+                    interp_tpr[0] = 0.0 
+                    roc_data[(model_name, treatment)].append(interp_tpr)
 
-                for criteri in criteris_llindar:
-                    t_b = llindars_boot[criteri]
+                # Collect metrics for optimism
+                for criterion in threshold_criteria:
+                    t_b = boot_thresholds[criterion]
                     
-                    m_boot = calcular_metriques_cliniques_completes(y_boot, y_prob_on_boot, t_b)
-                    m_orig_test = calcular_metriques_cliniques_completes(y_train, y_prob_on_orig, t_b)
+                    m_boot = calculate_complete_clinical_metrics(y_boot, y_prob_on_boot, t_b)
+                    m_orig_test = calculate_complete_clinical_metrics(y_train, y_prob_on_orig, t_b)
 
                     dict_opt = {
                         "Model": model_name,
-                        "Tractament": tractament,
-                        "Criteri_Llindar": criteri,
-                        "Llindar_Aplicat": t_b
+                        "Treatment": treatment,
+                        "Threshold_Criterion": criterion,
+                        "Applied_Threshold": t_b
                     }
                     for k in m_boot.keys():
                         dict_opt[k] = m_boot[k] - m_orig_test[k]
 
-                    optimisme_raw.append(dict_opt)
+                    raw_optimism.append(dict_opt)
 
-    # ==============================
+    # ==========================================
     # PLOTTING THE ROC CURVES
-    # ==============================
-    print("\nGenerant gràfics de corbes ROC...")
+    # ==========================================
+    print("\nGenerating ROC curves plot...")
     fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(16, 10))
     axes = axes.flatten()
     
@@ -301,29 +307,31 @@ def main(config_path, n_bootstraps=100):
         ax = axes[idx]
         tprs = roc_data[cfg]
         
-        # Dibuixar totes les corbes bootstrap (100 passes) - gris claret
+        # Draw bootstrap curves (light gray)
         for tpr in tprs:
             ax.plot(mean_fpr, tpr, color='gray', alpha=0.15, lw=1)
             
-        # Calcular i dibuixar la corba mitjana (línia forta)
+        # Draw mean curve
         mean_tpr = np.mean(tprs, axis=0)
-        mean_tpr[-1] = 1.0 # TPR is 1 when FPR is 1
+        mean_tpr[-1] = 1.0 
         mean_auc = auc(mean_fpr, mean_tpr)
         
-        ax.plot(mean_fpr, mean_tpr, color='#1f77b4', lw=2.5, label=f'Mitja (AUC = {mean_auc:.3f})')
-        ax.plot([0, 1], [0, 1], linestyle='--', lw=1.5, color='red', label='Atzar')
+        ax.plot(mean_fpr, mean_tpr, color='#1f77b4', lw=2.5, label=f'Mean (AUC = {mean_auc:.3f})')
+        ax.plot([0, 1], [0, 1], linestyle='--', lw=1.5, color='red', label='Random Chance')
         
-        # Formatació del gràfic
-        nom_model = cfg[0]
-        ax.set_title(f"{nom_model}\n({cfg[1]})", fontsize=11, fontweight='bold', pad=10)
-        ax.set_xlabel("False Positive Rate", fontsize=9)
-        ax.set_ylabel("True Positive Rate", fontsize=9)
+        # Plot formatting
+        formatted_model = friendly_names[cfg[0]]
+        formatted_treatment = friendly_names[cfg[1]]
+        
+        ax.set_title(f"{formatted_model}\n({formatted_treatment})", fontsize=11, fontweight='bold', pad=10)
+        ax.set_xlabel("False Positive Rate (1 - Specificity)", fontsize=9, fontweight='bold')
+        ax.set_ylabel("True Positive Rate (Sensitivity)", fontsize=9, fontweight='bold')
         ax.legend(loc="lower right")
         ax.grid(alpha=0.3)
         ax.set_xlim([0.0, 1.0])
         ax.set_ylim([0.0, 1.05])
 
-    # Amagar l'últim plot sobrant (perquè són 5 models en un grid de 2x3=6)
+    # Hide the empty last subplot (5 configs for 6 slots)
     axes[-1].axis('off')
     
     plt.tight_layout()
@@ -331,59 +339,62 @@ def main(config_path, n_bootstraps=100):
     plt.savefig(plot_output_path, dpi=300, bbox_inches='tight')
     plt.close()
     
-    print(f"[OK] Gràfic desat a: {plot_output_path}")
+    print(f"[OK] Plot saved successfully at: {plot_output_path}")
 
-    #Agregation and correction of optimism
-    df_opt = pd.DataFrame(optimisme_raw)
-    cols_metriques = [
+    # ==========================================
+    # AGGREGATION & FINAL EXPORT
+    # ==========================================
+    df_opt = pd.DataFrame(raw_optimism)
+    metrics_cols = [
         "AUROC", "AUPRC", "TP", "FP", "TN", "FN",
-        "Sensibilitat", "Especificitat", "PPV", "NPV", "MCC",
-        "Pacients_Marcats", "Pct_Marcats", "Pacients_Evitats", "Pct_Evitats", "Infeccions_Perdudes"
+        "Sensitivity", "Specificity", "PPV", "NPV", "MCC",
+        "Patients_Flagged", "Pct_Flagged", "Patients_Avoided", "Pct_Avoided", "Missed_Infections"
     ]
 
-    rows_resum = []
-    grouped = df_opt.groupby(["Model", "Tractament", "Criteri_Llindar"])
+    rows_summary = []
+    grouped = df_opt.groupby(["Model", "Treatment", "Threshold_Criterion"])
 
-    for (model, tractament, criteri), group in grouped:
-        orig_m = rendiment_original[(model, tractament, criteri)]
+    for (model, treatment, criterion), group in grouped:
+        orig_m = original_performance[(model, treatment, criterion)]
         row_dict = {
             "Model": model,
-            "Tractament": tractament,
-            "Criteri_Llindar": criteri,
-            "Llindar_Aplicat": round(orig_m["Llindar_Aplicat"], 4)
+            "Treatment": treatment,
+            "Threshold_Criterion": criterion,
+            "Applied_Threshold": round(orig_m["Applied_Threshold"], 4)
         }
 
-        for col in cols_metriques:
+        for col in metrics_cols:
             opt_vals = group[col].values
             mean_opt = np.mean(opt_vals)
             
-            val_corregit = orig_m[col] - mean_opt
+            corrected_val = orig_m[col] - mean_opt
             
-            ic_inf = np.percentile(orig_m[col] - opt_vals, 2.5)
-            ic_sup = np.percentile(orig_m[col] - opt_vals, 97.5)
+            # 95% Confidence Intervals
+            ci_inf = np.percentile(orig_m[col] - opt_vals, 2.5)
+            ci_sup = np.percentile(orig_m[col] - opt_vals, 97.5)
 
-            is_count = col in ["TP", "FP", "TN", "FN", "Pacients_Marcats", "Pacients_Evitats", "Infeccions_Perdudes"]
+            is_count = col in ["TP", "FP", "TN", "FN", "Patients_Flagged", "Patients_Avoided", "Missed_Infections"]
             dec = 2 if is_count else 4
 
-            row_dict[f"{col}_Aparent"] = round(orig_m[col], dec)
-            row_dict[f"{col}_Optimisme"] = round(mean_opt, dec)
-            row_dict[f"{col}_Corregit"] = round(val_corregit, dec)
-            row_dict[f"{col} (IC 95%)"] = f"{val_corregit:.{dec}f} ({ic_inf:.{dec}f} - {ic_sup:.{dec}f})"
+            row_dict[f"{col}_Apparent"] = round(orig_m[col], dec)
+            row_dict[f"{col}_Optimism"] = round(mean_opt, dec)
+            row_dict[f"{col}_Corrected"] = round(corrected_val, dec)
+            row_dict[f"{col} (95% CI)"] = f"{corrected_val:.{dec}f} ({ci_inf:.{dec}f} - {ci_sup:.{dec}f})"
 
-        rows_resum.append(row_dict)
+        rows_summary.append(row_dict)
 
-    df_resum = pd.DataFrame(rows_resum)
+    df_summary = pd.DataFrame(rows_summary)
 
-    output_csv = os.path.join(base_dir, "taula_resultats_bootstrap.csv")
-    df_resum.to_csv(output_csv, index=False, sep=",")
+    output_csv = os.path.join(base_dir, "bootstrap_results_table.csv")
+    df_summary.to_csv(output_csv, index=False, sep=",")
 
     print("\n=======================================================")
-    print(f" [OK] Càlcul d'Optimisme finalitzat amb èxit!")
-    print(f" Taula corregida desada a l'arrel: {output_csv}")
+    print(f" [OK] Optimism calculation and correction completed!")
+    print(f" Corrected table saved at: {output_csv}")
     print("=======================================================\n")
     
-    cols_preview = ["Model", "Tractament", "Criteri_Llindar", "Sensibilitat (IC 95%)", "Especificitat (IC 95%)", "AUROC (IC 95%)"]
-    print(df_resum[cols_preview].head(10).to_string())
+    preview_cols = ["Model", "Treatment", "Threshold_Criterion", "Sensitivity (95% CI)", "Specificity (95% CI)", "AUROC (95% CI)"]
+    print(df_summary[preview_cols].head(10).to_string())
 
 if __name__ == "__main__":
     config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "config.json"))
