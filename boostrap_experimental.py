@@ -6,6 +6,7 @@ import json
 import warnings
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
@@ -16,7 +17,8 @@ from sklearn.metrics import (
     roc_auc_score, 
     precision_recall_curve, 
     auc, 
-    matthews_corrcoef
+    matthews_corrcoef,
+    roc_curve
 )
 from sklearn.utils import resample
 from imblearn.over_sampling import SMOTE
@@ -184,6 +186,20 @@ def main(config_path, n_bootstraps=100):
     tractaments_list = ["Sense_Tractament", "Ponderacio", "SMOTENC"]
     criteris_llindar = ["Sensibilitat_0.8", "MCC", "Youden"]
 
+    # ==============================
+    # SETUP FOR ROC CURVES PLOTTING
+    # ==============================
+    configs_to_plot = [
+        ("RegressioLogisticaPenalitzada", "Sense_Tractament"),
+        ("QuadraticDiscriminantAnalysis", "Ponderacio"),
+        ("RandomForestClassifier", "Sense_Tractament"),
+        ("XGBClassifier", "Ponderacio"),
+        ("DenseNeuralNet", "SMOTENC")
+    ]
+    
+    roc_data = {cfg: [] for cfg in configs_to_plot}
+    mean_fpr = np.linspace(0, 1, 100) # Base FPR to interpolate TPRs
+
     # mesuring the original performance on the training data without replacement
     print("\n--- 2. Calculant el rendiment original aparent ---")
     rendiment_original = {}
@@ -210,7 +226,7 @@ def main(config_path, n_bootstraps=100):
                 rendiment_original[(model_name, tractament, criteri)] = m_orig
 
     # boostrapwith the same model and treatment to estimate optimism
-    print(f"\n--- 3. Executant Bootstrap ({n_bootstraps} iteracions) per calcular l'optimisme ---")
+    print(f"\n--- 3. Executant Bootstrap ({n_bootstraps} iteracions) per calcular l'optimisme i extreure ROCs ---")
     optimisme_raw = []
 
     for b in range(n_bootstraps):
@@ -225,7 +241,7 @@ def main(config_path, n_bootstraps=100):
         )
 
         for tractament in tractaments_list:
-            if tractament == "SMOTE":
+            if tractament == "SMOTENC":
                 try:
                     smote = SMOTE(random_state=config["random_state"] + b)
                     X_tr_boot, y_tr_boot = smote.fit_resample(X_boot, y_boot)
@@ -249,11 +265,17 @@ def main(config_path, n_bootstraps=100):
                     X_tr_boot, y_tr_boot, X_train, 
                     random_state=config["random_state"] + b
                 )
+                
+                # EXTRACT ROC DATA FOR THE SPECIFIED CONFIGS
+                if (model_name, tractament) in configs_to_plot:
+                    fpr, tpr, _ = roc_curve(y_train, y_prob_on_orig)
+                    interp_tpr = np.interp(mean_fpr, fpr, tpr)
+                    interp_tpr[0] = 0.0 # TPR is 0 when FPR is 0
+                    roc_data[(model_name, tractament)].append(interp_tpr)
 
                 for criteri in criteris_llindar:
                     t_b = llindars_boot[criteri]
                     
-
                     m_boot = calcular_metriques_cliniques_completes(y_boot, y_prob_on_boot, t_b)
                     m_orig_test = calcular_metriques_cliniques_completes(y_train, y_prob_on_orig, t_b)
 
@@ -267,6 +289,49 @@ def main(config_path, n_bootstraps=100):
                         dict_opt[k] = m_boot[k] - m_orig_test[k]
 
                     optimisme_raw.append(dict_opt)
+
+    # ==============================
+    # PLOTTING THE ROC CURVES
+    # ==============================
+    print("\nGenerant gràfics de corbes ROC...")
+    fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(16, 10))
+    axes = axes.flatten()
+    
+    for idx, cfg in enumerate(configs_to_plot):
+        ax = axes[idx]
+        tprs = roc_data[cfg]
+        
+        # Dibuixar totes les corbes bootstrap (100 passes) - gris claret
+        for tpr in tprs:
+            ax.plot(mean_fpr, tpr, color='gray', alpha=0.15, lw=1)
+            
+        # Calcular i dibuixar la corba mitjana (línia forta)
+        mean_tpr = np.mean(tprs, axis=0)
+        mean_tpr[-1] = 1.0 # TPR is 1 when FPR is 1
+        mean_auc = auc(mean_fpr, mean_tpr)
+        
+        ax.plot(mean_fpr, mean_tpr, color='#1f77b4', lw=2.5, label=f'Mitja (AUC = {mean_auc:.3f})')
+        ax.plot([0, 1], [0, 1], linestyle='--', lw=1.5, color='red', label='Atzar')
+        
+        # Formatació del gràfic
+        nom_model = cfg[0]
+        ax.set_title(f"{nom_model}\n({cfg[1]})", fontsize=11, fontweight='bold', pad=10)
+        ax.set_xlabel("False Positive Rate", fontsize=9)
+        ax.set_ylabel("True Positive Rate", fontsize=9)
+        ax.legend(loc="lower right")
+        ax.grid(alpha=0.3)
+        ax.set_xlim([0.0, 1.0])
+        ax.set_ylim([0.0, 1.05])
+
+    # Amagar l'últim plot sobrant (perquè són 5 models en un grid de 2x3=6)
+    axes[-1].axis('off')
+    
+    plt.tight_layout()
+    plot_output_path = os.path.join(base_dir, "roc_curves_bootstrap.png")
+    plt.savefig(plot_output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print(f"[OK] Gràfic desat a: {plot_output_path}")
 
     #Agregation and correction of optimism
     df_opt = pd.DataFrame(optimisme_raw)
