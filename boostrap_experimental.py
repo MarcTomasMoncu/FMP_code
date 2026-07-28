@@ -181,7 +181,7 @@ def main(config_path, n_bootstraps=100):
         "DenseNeuralNet"
     ]
     
-    tractaments_list = ["Sense_Tractament", "Ponderacio", "SMOTE"]
+    tractaments_list = ["Sense_Tractament", "Ponderacio", "SMOTENC"]
     criteris_llindar = ["Sensibilitat_0.8", "MCC", "Youden"]
 
     # mesuring the original performance on the training data without replacement
@@ -189,7 +189,7 @@ def main(config_path, n_bootstraps=100):
     rendiment_original = {}
 
     for tractament in tractaments_list:
-        if tractament == "SMOTE":
+        if tractament == "SMOTENC":
             smote = SMOTE(random_state=config["random_state"])
             X_tr_orig, y_tr_orig = smote.fit_resample(X_train, y_train)
         else:

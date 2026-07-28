@@ -2,10 +2,10 @@ import os
 import json
 import pandas as pd
 from models.dl_models import build_dnn_model, cross_validate_dnn, train_and_evaluate_dnn
-from models.ml_models import initialize_models, cross_validate_model, train_and_evaluate_model
+from old_scripts.ml_models import initialize_models, cross_validate_model, train_and_evaluate_model
 from preprocessing import split_and_preprocess
 from utils.metrics import calculate_metrics, cv_metrics_to_df, find_optimal_threshold
-from interpretability import generate_shap_summary, generate_shap_dnn 
+from old_scripts.interpretability import generate_shap_summary, generate_shap_dnn 
 from imblearn.over_sampling import SMOTE  # Nova importació necessària per al model final
 import warnings
 

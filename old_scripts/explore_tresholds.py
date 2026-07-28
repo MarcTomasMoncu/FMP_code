@@ -9,7 +9,7 @@ import warnings
 
 # Importacions del teu propi projecte
 from preprocessing import split_and_preprocess
-from models.ml_models import initialize_models, train_and_evaluate_model
+from old_scripts.ml_models import initialize_models, train_and_evaluate_model
 from models.dl_models import build_dnn_model, train_and_evaluate_dnn
 
 warnings.filterwarnings("ignore")

@@ -24,31 +24,59 @@ vars_categoriques = [
 vars_categoriques = [v for v in vars_categoriques if v in df.columns]
 
 # ==============================================================================
-# 1. GENERATION OF THE SPECIALIZED GENERAL DESCRIPTIVE TABLE
+# 1. GENERATION OF THE SPECIALIZED GENERAL DESCRIPTIVE TABLE (STRATIFIED)
 # ==============================================================================
 rows_general = []
+
+# Separem per sexe (assumint 0 = Home, 1 = Dona basat en el comentari "Women = 1")
+df_homes = df[df["SEXE"] == 0]
+df_dones = df[df["SEXE"] == 1]
 
 # Metrics for quantitative variables (Mean ± SD and Median)
 for v in vars_quantitatives:
     if v in df.columns:
         desc = df[v].describe()
+        desc_h = df_homes[v].describe()
+        desc_d = df_dones[v].describe()
+        
+        # Helper function per evitar errors si hi ha NaNs
+        def fmt_quant(d):
+            if pd.isna(d.get('mean')):
+                return "N/A"
+            return f"Mean: {d['mean']:.2f} ± {d['std']:.2f} (Median: {d['50%']:.0f})"
+            
         rows_general.append({
             "Variable": f"{v}",
-            "Statistics": f"Mean: {desc['mean']:.2f} ± {desc['std']:.2f} (Median: {desc['50%']:.0f})"
+            "Overall": fmt_quant(desc),
+            "Men (0)": fmt_quant(desc_h),
+            "Women (1)": fmt_quant(desc_d)
         })
 
 # Metrics for categorical/binary variables (Counts of active cases = 1 and percentages)
 for v in vars_categoriques:
+    # Overall
     total_valids = df[v].dropna().count()
     casos_actius = (df[v] == 1).sum()
     pct = (casos_actius / total_valids) * 100 if total_valids > 0 else 0
+    
+    # Homes
+    total_valids_h = df_homes[v].dropna().count()
+    casos_actius_h = (df_homes[v] == 1).sum()
+    pct_h = (casos_actius_h / total_valids_h) * 100 if total_valids_h > 0 else 0
+    
+    # Dones
+    total_valids_d = df_dones[v].dropna().count()
+    casos_actius_d = (df_dones[v] == 1).sum()
+    pct_d = (casos_actius_d / total_valids_d) * 100 if total_valids_d > 0 else 0
     
     # Clarify what the percentage represents for SEXE (1 = Women)
     display_name = f"{v} (Active cases = 1)" if v != "SEXE" else "SEXE (Women = 1)"
     
     rows_general.append({
         "Variable": display_name,
-        "Statistics": f"Cases: {casos_actius} of {total_valids} ({pct:.1f}%)"
+        "Overall": f"Cases: {casos_actius} of {total_valids} ({pct:.1f}%)",
+        "Men (0)": f"Cases: {casos_actius_h} of {total_valids_h} ({pct_h:.1f}%)",
+        "Women (1)": f"Cases: {casos_actius_d} of {total_valids_d} ({pct_d:.1f}%)"
     })
 
 taula_general_exp = pd.DataFrame(rows_general)
@@ -97,8 +125,8 @@ taula_infeccio_exp = pd.DataFrame(rows_infeccio)
 # 3. FUNCTION TO EXPORT FORMATTED TABLES TO PNG WITH LEGENDS
 # ==============================================================================
 def exportar_a_png_millorat(df_table, nom_fitxer, titol, llegenda):
-    # Adjust canvas size to fit the table and the legend below
-    fig, ax = plt.subplots(figsize=(14, len(df_table) * 0.4 + 2.0))
+    # Adjust canvas size: Ampliada a 18 per acomodar les noves columnes de gènere
+    fig, ax = plt.subplots(figsize=(18, len(df_table) * 0.4 + 2.0))
     ax.axis('tight')
     ax.axis('off')
     ax.set_title(titol, fontweight="bold", fontsize=15, pad=15, color="#1a365d")
@@ -140,7 +168,7 @@ legend_comparative = (
 exportar_a_png_millorat(
     taula_general_exp, 
     "taula_general_explicativa.png", 
-    "Dataset Descriptive Analysis", 
+    "Dataset Descriptive Analysis (Overall & by Sex)", 
     legend_general
 )
 exportar_a_png_millorat(
