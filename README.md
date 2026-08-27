@@ -6,21 +6,21 @@ This project is the practical component of the Final Master Project (FMP). Its o
 
 ├── config.json               Centralized configuration (paths, hyperparameters)
 
-├── train_pipeline.py         Main experiment orchestrator
-
 ├── preprocessing.py          Data cleaning, normalization, and balancing (SMOTE)
-
-├── interpretability.py       Explainability analysis using SHAP
 
 ├── descriptive_analysis.py   Perform a descriptive analysis of the variables
 
 ├── requirements.txt          Control version of the packages
 
+├── boostrap_experimental.py  Main script to train and test all the models
+
+├── plots_results.py          Script to generate the plots for the article
+
+├── old_scripts/              Old scripts used during the FMP project
+
 ├── models/                   Model definition package
 
 │   ├── **init**.py
-
-│   ├── ml_models.py          Classical models (RF, XGB, SVC, QDA...)
 
 │   └── dl_models.py          Dense Neural Network (DNN) with TensorFlow/Keras
 
@@ -33,6 +33,7 @@ This project is the practical component of the Final Master Project (FMP). Its o
 ├── results/                  Output: SHAP plots and CSV reports (automatically generated)
 
 └── artifacts/                Output: Trained models (.pkl / .keras) (automatically generated)
+
 
 **INSTALLATION AND SETUP**
 
@@ -52,17 +53,14 @@ Variables are controlled through config.json, such as sensitivity, activation of
 **USAGE**
 
 From the root folder of the repository, simply run in the terminal:
-  $python3 train_pipeline.py
+  $python3 boostrap_experimental.py
 
 **RESULTS AND INTERPRETATION**
 
 In the results folder, the following are automatically generated:
 
-1. performance_results.csv: Comparison of all models under a 90% sensitivity threshold.
+1. taula_resultats_boostrap.csv: Comparison of all models.
 
-2. cross_validation_results.csv: Training robustness statistics.
-
-3. SHAP plots: Visualization of feature importance (risk factors) for tree-based models.
 
 **EXTRA ANALYSIS**
 
@@ -75,3 +73,4 @@ Once executed, two PNG images will be generated and saved directly into the resu
 1. general descriptive summary of the dataset.
 
 2. comparative summary stratifying the data by infection vs. non-infection.
+
