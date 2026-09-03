@@ -23,7 +23,8 @@ from sklearn.metrics import (
 from sklearn.utils import resample
 from imblearn.over_sampling import SMOTE
 
-from preprocessing import split_and_preprocess
+# Canvi a la nova funció que no divideix el dataset
+from preprocessing import preprocess_full_dataset
 from models.dl_models import build_dnn_model
 
 warnings.filterwarnings("ignore")
@@ -168,12 +169,11 @@ def main(config_path, n_bootstraps=100):
     base_dir = os.path.dirname(config_path)
     dataset_path = os.path.join(base_dir, config["dataset_path"])
     
-    print("--- 1. Loading original dataset ---")
-    X_train, X_test, y_train, y_test, _, _ = split_and_preprocess(
+    print("--- 1. Loading original dataset (Complete Cohort) ---")
+    X_full, y_full, _, _ = preprocess_full_dataset(
         dataset_path,
         exclude_columns=config.get("exclude_columns", []),
         target_column=config["target_column"],
-        test_size=config["test_size"],
         random_state=config["random_state"],
         normalize=config["normalize"],
         apply_smote=False
@@ -207,27 +207,27 @@ def main(config_path, n_bootstraps=100):
     roc_data = {cfg: [] for cfg in configs_to_plot}
     mean_fpr = np.linspace(0, 1, 100)
 
-    print("\n--- 2. Calculating apparent original performance ---")
+    print("\n--- 2. Calculating apparent original performance (Complete Cohort) ---")
     original_performance = {}
 
     for treatment in treatments_list:
         if treatment == "SMOTENC":
             smote = SMOTE(random_state=config["random_state"])
-            X_tr_orig, y_tr_orig = smote.fit_resample(X_train, y_train)
+            X_tr_orig, y_tr_orig = smote.fit_resample(X_full, y_full)
         else:
-            X_tr_orig, y_tr_orig = X_train.copy(), y_train.copy()
+            X_tr_orig, y_tr_orig = X_full.copy(), y_full.copy()
 
         for model_name in models_list:
             y_prob_orig = train_and_predict(
                 model_name, treatment, 
-                X_tr_orig, y_tr_orig, X_train, 
+                X_tr_orig, y_tr_orig, X_full, 
                 random_state=config["random_state"]
             )
-            orig_thresholds = find_optimized_thresholds(y_train, y_prob_orig)
+            orig_thresholds = find_optimized_thresholds(y_full, y_prob_orig)
 
             for criterion in threshold_criteria:
                 t_orig = orig_thresholds[criterion]
-                m_orig = calculate_complete_clinical_metrics(y_train, y_prob_orig, t_orig)
+                m_orig = calculate_complete_clinical_metrics(y_full, y_prob_orig, t_orig)
                 m_orig["Applied_Threshold"] = t_orig
                 original_performance[(model_name, treatment, criterion)] = m_orig
 
@@ -239,9 +239,9 @@ def main(config_path, n_bootstraps=100):
             print(f"Bootstrap Round {b + 1}/{n_bootstraps}...")
 
         X_boot, y_boot = resample(
-            X_train, y_train, 
+            X_full, y_full, 
             replace=True, 
-            stratify=y_train, 
+            stratify=y_full, 
             random_state=config["random_state"] + b
         )
 
@@ -264,16 +264,16 @@ def main(config_path, n_bootstraps=100):
                 )
                 boot_thresholds = find_optimized_thresholds(y_boot, y_prob_on_boot)
 
-                # 2. Model evaluated on original sample
+                # 2. Model evaluated on original sample (Complete Cohort)
                 y_prob_on_orig = train_and_predict(
                     model_name, treatment, 
-                    X_tr_boot, y_tr_boot, X_train, 
+                    X_tr_boot, y_tr_boot, X_full, 
                     random_state=config["random_state"] + b
                 )
                 
                 # Extract ROC for selected configs
                 if (model_name, treatment) in configs_to_plot:
-                    fpr, tpr, _ = roc_curve(y_train, y_prob_on_orig)
+                    fpr, tpr, _ = roc_curve(y_full, y_prob_on_orig)
                     interp_tpr = np.interp(mean_fpr, fpr, tpr)
                     interp_tpr[0] = 0.0 
                     roc_data[(model_name, treatment)].append(interp_tpr)
@@ -283,7 +283,7 @@ def main(config_path, n_bootstraps=100):
                     t_b = boot_thresholds[criterion]
                     
                     m_boot = calculate_complete_clinical_metrics(y_boot, y_prob_on_boot, t_b)
-                    m_orig_test = calculate_complete_clinical_metrics(y_train, y_prob_on_orig, t_b)
+                    m_orig_test = calculate_complete_clinical_metrics(y_full, y_prob_on_orig, t_b)
 
                     dict_opt = {
                         "Model": model_name,
