@@ -1,5 +1,4 @@
 import os
-# To hide warnings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import json
@@ -21,10 +20,9 @@ from sklearn.metrics import (
     roc_curve
 )
 from sklearn.utils import resample
-from imblearn.over_sampling import SMOTE
+from imblearn.over_sampling import SMOTENC, SMOTE
 
-# Canvi a la nova funció que no divideix el dataset
-from preprocessing import preprocess_full_dataset
+from preprocessing import preprocess_full_dataset, get_categorical_indices
 from models.dl_models import build_dnn_model
 
 warnings.filterwarnings("ignore")
@@ -37,17 +35,25 @@ def calculate_complete_clinical_metrics(y_true, y_prob, threshold):
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
     
     total = len(y_true)
-    sens = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    total_infections = tp + fn
+    
+    sens = tp / total_infections if total_infections > 0 else 0.0
     spec = tn / (tn + fp) if (tn + fp) > 0 else 0.0
     ppv = tp / (tp + fp) if (tp + fp) > 0 else 0.0
     npv = tn / (tn + fn) if (tn + fn) > 0 else 0.0
     mcc = matthews_corrcoef(y_true, y_pred)
     
+    # 1. Historias marcadas para revisión: (TP + FP) / N
     flagged_for_review = fp + tp
     pct_flagged = (flagged_for_review / total) * 100.0 if total > 0 else 0.0
     
-    avoided_review = tn + fn
-    pct_avoided = (avoided_review / total) * 100.0 if total > 0 else 0.0
+    # 2. Porcentaje total de historias NO revisadas (Workload Reduction): (TN + FN) / N
+    workload_reduction_count = tn + fn
+    pct_workload_reduction = (workload_reduction_count / total) * 100.0 if total > 0 else 0.0
+    
+    # 3. Proporción de infecciones no detectadas: FN / (TP + FN)
+    missed_infections_count = fn
+    pct_missed_infections = (fn / total_infections) * 100.0 if total_infections > 0 else 0.0
     
     try:
         auroc = roc_auc_score(y_true, y_prob)
@@ -64,15 +70,16 @@ def calculate_complete_clinical_metrics(y_true, y_prob, threshold):
         "TN": tn,
         "FN": fn,
         "Sensitivity": sens,
-        "Specificity": spec,
+        "Specificity": spec,                    # TN / (TN + FP)
         "PPV": ppv,
         "NPV": npv,
         "MCC": mcc,
         "Patients_Flagged": flagged_for_review,
-        "Pct_Flagged": pct_flagged,
-        "Patients_Avoided": avoided_review,
-        "Pct_Avoided": pct_avoided,
-        "Missed_Infections": fn
+        "Pct_Flagged": pct_flagged,             # (TP + FP) / N
+        "Workload_Reduction": workload_reduction_count,
+        "Pct_Workload_Reduction": pct_workload_reduction, # (TN + FN) / N
+        "Missed_Infections": missed_infections_count,
+        "Pct_Missed_Infections": pct_missed_infections    # FN / (TP + FN)
     }
 
 # ==========================================
@@ -179,11 +186,14 @@ def main(config_path, n_bootstraps=100):
         apply_smote=False
     )
 
+    # Identificar les columnes categòriques per SMOTENC
+    cat_indices = get_categorical_indices(X_full)
+    print(f"Identified {len(cat_indices)} categorical/binary features for SMOTENC.")
+
     models_list = ["PenalizedLogisticRegression", "QDA", "RandomForest", "XGBoost", "DNN"]
     treatments_list = ["No_Treatment", "Class_Weighting", "SMOTENC"]
     threshold_criteria = ["Sensitivity_0.8", "MCC", "Youden"]
 
-    # Configuration for ROC Curves
     configs_to_plot = [
         ("PenalizedLogisticRegression", "No_Treatment"),
         ("QDA", "Class_Weighting"),
@@ -192,7 +202,6 @@ def main(config_path, n_bootstraps=100):
         ("DNN", "SMOTENC")
     ]
     
-    # Dictionary for pretty-printing in the plot
     friendly_names = {
         "PenalizedLogisticRegression": "Penalized Logistic Reg.",
         "QDA": "QDA",
@@ -212,7 +221,10 @@ def main(config_path, n_bootstraps=100):
 
     for treatment in treatments_list:
         if treatment == "SMOTENC":
-            smote = SMOTE(random_state=config["random_state"])
+            if 0 < len(cat_indices) < X_full.shape[1]:
+                smote = SMOTENC(categorical_features=cat_indices, random_state=config["random_state"])
+            else:
+                smote = SMOTE(random_state=config["random_state"])
             X_tr_orig, y_tr_orig = smote.fit_resample(X_full, y_full)
         else:
             X_tr_orig, y_tr_orig = X_full.copy(), y_full.copy()
@@ -248,7 +260,10 @@ def main(config_path, n_bootstraps=100):
         for treatment in treatments_list:
             if treatment == "SMOTENC":
                 try:
-                    smote = SMOTE(random_state=config["random_state"] + b)
+                    if 0 < len(cat_indices) < X_boot.shape[1]:
+                        smote = SMOTENC(categorical_features=cat_indices, random_state=config["random_state"] + b)
+                    else:
+                        smote = SMOTE(random_state=config["random_state"] + b)
                     X_tr_boot, y_tr_boot = smote.fit_resample(X_boot, y_boot)
                 except Exception:
                     X_tr_boot, y_tr_boot = X_boot.copy(), y_boot.copy()
@@ -256,7 +271,6 @@ def main(config_path, n_bootstraps=100):
                 X_tr_boot, y_tr_boot = X_boot.copy(), y_boot.copy()
 
             for model_name in models_list:
-                # 1. Model evaluated on bootstrap sample
                 y_prob_on_boot = train_and_predict(
                     model_name, treatment, 
                     X_tr_boot, y_tr_boot, X_boot, 
@@ -264,21 +278,18 @@ def main(config_path, n_bootstraps=100):
                 )
                 boot_thresholds = find_optimized_thresholds(y_boot, y_prob_on_boot)
 
-                # 2. Model evaluated on original sample (Complete Cohort)
                 y_prob_on_orig = train_and_predict(
                     model_name, treatment, 
                     X_tr_boot, y_tr_boot, X_full, 
                     random_state=config["random_state"] + b
                 )
                 
-                # Extract ROC for selected configs
                 if (model_name, treatment) in configs_to_plot:
                     fpr, tpr, _ = roc_curve(y_full, y_prob_on_orig)
                     interp_tpr = np.interp(mean_fpr, fpr, tpr)
                     interp_tpr[0] = 0.0 
                     roc_data[(model_name, treatment)].append(interp_tpr)
 
-                # Collect metrics for optimism
                 for criterion in threshold_criteria:
                     t_b = boot_thresholds[criterion]
                     
@@ -307,11 +318,9 @@ def main(config_path, n_bootstraps=100):
         ax = axes[idx]
         tprs = roc_data[cfg]
         
-        # Draw bootstrap curves (light gray)
         for tpr in tprs:
             ax.plot(mean_fpr, tpr, color='gray', alpha=0.15, lw=1)
             
-        # Draw mean curve
         mean_tpr = np.mean(tprs, axis=0)
         mean_tpr[-1] = 1.0 
         mean_auc = auc(mean_fpr, mean_tpr)
@@ -319,7 +328,6 @@ def main(config_path, n_bootstraps=100):
         ax.plot(mean_fpr, mean_tpr, color='#1f77b4', lw=2.5, label=f'Mean (AUC = {mean_auc:.3f})')
         ax.plot([0, 1], [0, 1], linestyle='--', lw=1.5, color='red', label='Random Chance')
         
-        # Plot formatting
         formatted_model = friendly_names[cfg[0]]
         formatted_treatment = friendly_names[cfg[1]]
         
@@ -331,7 +339,6 @@ def main(config_path, n_bootstraps=100):
         ax.set_xlim([0.0, 1.0])
         ax.set_ylim([0.0, 1.05])
 
-    # Hide the empty last subplot (5 configs for 6 slots)
     axes[-1].axis('off')
     
     plt.tight_layout()
@@ -369,7 +376,6 @@ def main(config_path, n_bootstraps=100):
             
             corrected_val = orig_m[col] - mean_opt
             
-            # 95% Confidence Intervals
             ci_inf = np.percentile(orig_m[col] - opt_vals, 2.5)
             ci_sup = np.percentile(orig_m[col] - opt_vals, 97.5)
 
@@ -389,12 +395,9 @@ def main(config_path, n_bootstraps=100):
     df_summary.to_csv(output_csv, index=False, sep=",")
 
     print("\n=======================================================")
-    print(f" [OK] Optimism calculation and correction completed!")
+    print(f" [OK] SMOTENC evaluation completed!")
     print(f" Corrected table saved at: {output_csv}")
     print("=======================================================\n")
-    
-    preview_cols = ["Model", "Treatment", "Threshold_Criterion", "Sensitivity (95% CI)", "Specificity (95% CI)", "AUROC (95% CI)"]
-    print(df_summary[preview_cols].head(10).to_string())
 
 if __name__ == "__main__":
     config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "config.json"))

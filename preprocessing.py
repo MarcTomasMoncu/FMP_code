@@ -1,27 +1,46 @@
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
-from imblearn.over_sampling import SMOTE
+from imblearn.over_sampling import SMOTENC, SMOTE
 
 def load_dataset(file_path, exclude_columns=None, target_column="infection"):
     data = pd.read_csv(file_path, sep=",")
     if exclude_columns:
-        data = data.drop(columns=exclude_columns, errors="ignore") #eliminate the columns that we do not want to use for the model
-    X = data.drop(columns=[target_column]) #dataset without the target variable
-    y = data[target_column].values #dataset with the target variable
+        data = data.drop(columns=exclude_columns, errors="ignore")
+    X = data.drop(columns=[target_column])
+    y = data[target_column].values
     return X, y, X.columns.tolist()
 
-def preprocess_full_dataset(file_path, exclude_columns=None, target_column="infection", random_state=42, normalize=True, apply_smote=True):
+def get_categorical_indices(X):
+    """
+    Detecta els índexs de les columnes categòriques, booleanes o binàries (0/1).
+    """
+    cat_indices = []
+    for i, col in enumerate(X.columns):
+        unique_vals = set(X[col].dropna().unique())
+        is_binary = unique_vals.issubset({0, 1, 0.0, 1.0})
+        is_discrete = X[col].dtype in ['object', 'category', 'bool'] or (X[col].nunique() <= 10)
+        
+        if is_binary or is_discrete:
+            cat_indices.append(i)
+    return cat_indices
+
+def preprocess_full_dataset(file_path, exclude_columns=None, target_column="infection", random_state=42, normalize=True, apply_smote=False):
     X, y, feature_names = load_dataset(file_path, exclude_columns, target_column)
     
+    cat_indices = get_categorical_indices(X)
+
     if normalize:
-        scaler = MinMaxScaler() #put all between 0 and 1
-        X_scaled = scaler.fit_transform(X) #fit the scaler to the data and transform it
-        X = pd.DataFrame(X_scaled, columns=feature_names) #convert the scaled data back to a DataFrame with the original feature names
+        scaler = MinMaxScaler()
+        X_scaled = scaler.fit_transform(X)
+        X = pd.DataFrame(X_scaled, columns=feature_names)
     else:
         scaler = None
 
     if apply_smote:
-        smote = SMOTE(random_state=random_state) #create fictitious samples of the minority class to balance the dataset
+        if 0 < len(cat_indices) < X.shape[1]:
+            smote = SMOTENC(categorical_features=cat_indices, random_state=random_state)
+        else:
+            smote = SMOTE(random_state=random_state)
         X, y = smote.fit_resample(X, y)
 
     return X, y, scaler, feature_names
