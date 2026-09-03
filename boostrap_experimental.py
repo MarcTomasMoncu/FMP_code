@@ -3,10 +3,13 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import json
 import warnings
+import random
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import tensorflow as tf
 
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 from sklearn.ensemble import RandomForestClassifier
@@ -27,6 +30,12 @@ from models.dl_models import build_dnn_model
 
 warnings.filterwarnings("ignore")
 
+def set_all_seeds(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+
 # ==========================================
 # 1. METRICS CALCULATION
 # ==========================================
@@ -43,15 +52,12 @@ def calculate_complete_clinical_metrics(y_true, y_prob, threshold):
     npv = tn / (tn + fn) if (tn + fn) > 0 else 0.0
     mcc = matthews_corrcoef(y_true, y_pred)
     
-    # 1. Historias marcadas para revisión: (TP + FP) / N
     flagged_for_review = fp + tp
     pct_flagged = (flagged_for_review / total) * 100.0 if total > 0 else 0.0
     
-    # 2. Porcentaje total de historias NO revisadas (Workload Reduction): (TN + FN) / N
     workload_reduction_count = tn + fn
     pct_workload_reduction = (workload_reduction_count / total) * 100.0 if total > 0 else 0.0
     
-    # 3. Proporción de infecciones no detectadas: FN / (TP + FN)
     missed_infections_count = fn
     pct_missed_infections = (fn / total_infections) * 100.0 if total_infections > 0 else 0.0
     
@@ -70,16 +76,16 @@ def calculate_complete_clinical_metrics(y_true, y_prob, threshold):
         "TN": tn,
         "FN": fn,
         "Sensitivity": sens,
-        "Specificity": spec,                    # TN / (TN + FP)
+        "Specificity": spec,
         "PPV": ppv,
         "NPV": npv,
         "MCC": mcc,
         "Patients_Flagged": flagged_for_review,
-        "Pct_Flagged": pct_flagged,             # (TP + FP) / N
+        "Pct_Flagged": pct_flagged,
         "Workload_Reduction": workload_reduction_count,
-        "Pct_Workload_Reduction": pct_workload_reduction, # (TN + FN) / N
+        "Pct_Workload_Reduction": pct_workload_reduction,
         "Missed_Infections": missed_infections_count,
-        "Pct_Missed_Infections": pct_missed_infections    # FN / (TP + FN)
+        "Pct_Missed_Infections": pct_missed_infections
     }
 
 # ==========================================
@@ -120,38 +126,45 @@ def find_optimized_thresholds(y_true, y_prob):
     }
 
 # ==========================================
-# 3. MODEL TRAINING AND PREDICTION
+# 3. SINGLE MODEL TRAINING AND PREDICTION
 # ==========================================
-def train_and_predict(model_name, treatment, X_train_tr, y_train_tr, X_eval, random_state=42):
+def train_model(model_name, treatment, X_train_tr, y_train_tr, seed=42):
+    """
+    Entrena UN ÚNIC model per iteració garantint la mateixa instància
+    per a avaluar tant la mostra bootstrap com la cohort original.
+    """
+    set_all_seeds(seed)
     n_neg = np.sum(y_train_tr == 0)
     n_pos = np.sum(y_train_tr == 1)
     scale_pos_weight = n_neg / n_pos if n_pos > 0 else 1.0
 
     if model_name == "PenalizedLogisticRegression":
         cw = 'balanced' if treatment == "Class_Weighting" else None
-        model = LogisticRegression(penalty='l2', C=1.0, class_weight=cw, random_state=random_state)
+        model = LogisticRegression(penalty='l2', C=1.0, class_weight=cw, random_state=seed)
         model.fit(X_train_tr, y_train_tr)
-        return model.predict_proba(X_eval)[:, 1]
+        return model
 
     elif model_name == "QDA":
         priors_opt = [0.5, 0.5] if treatment == "Class_Weighting" else None
         model = QuadraticDiscriminantAnalysis(reg_param=0.1, priors=priors_opt)
         model.fit(X_train_tr, y_train_tr)
-        return model.predict_proba(X_eval)[:, 1]
+        return model
 
     elif model_name == "RandomForest":
         cw = 'balanced' if treatment == "Class_Weighting" else None
-        model = RandomForestClassifier(n_estimators=100, max_depth=5, class_weight=cw, random_state=random_state)
+        model = RandomForestClassifier(n_estimators=100, max_depth=5, class_weight=cw, random_state=seed)
         model.fit(X_train_tr, y_train_tr)
-        return model.predict_proba(X_eval)[:, 1]
+        return model
 
     elif model_name == "XGBoost":
         spw = scale_pos_weight if treatment == "Class_Weighting" else 1.0
-        model = XGBClassifier(learning_rate=0.1, max_depth=3, scale_pos_weight=spw, random_state=random_state)
+        model = XGBClassifier(learning_rate=0.1, max_depth=3, scale_pos_weight=spw, random_state=seed)
         model.fit(X_train_tr, y_train_tr)
-        return model.predict_proba(X_eval)[:, 1]
+        return model
 
     elif model_name == "DNN":
+        tf.keras.backend.clear_session()
+        tf.random.set_seed(seed)
         dnn_model = build_dnn_model(input_dim=X_train_tr.shape[1], dropout_rate=0.5, lr=1e-4)
         cw_dict = {0: 1.0, 1: float(scale_pos_weight)} if treatment == "Class_Weighting" else None
         
@@ -161,10 +174,16 @@ def train_and_predict(model_name, treatment, X_train_tr, y_train_tr, X_eval, ran
             class_weight=cw_dict, 
             verbose=0
         )
-        return dnn_model.predict(X_eval, verbose=0).flatten()
+        return dnn_model
 
     else:
-        raise ValueError(f"Model not recognized: {model_name}")
+        raise ValueError(f"Model no reconegut: {model_name}")
+
+def predict_probabilities(model, model_name, X_eval):
+    if model_name == "DNN":
+        return model.predict(X_eval, verbose=0).flatten()
+    else:
+        return model.predict_proba(X_eval)[:, 1]
 
 # ==========================================
 # 4. BOOTSTRAP MAIN PIPELINE
@@ -176,19 +195,18 @@ def main(config_path, n_bootstraps=100):
     base_dir = os.path.dirname(config_path)
     dataset_path = os.path.join(base_dir, config["dataset_path"])
     
-    print("--- 1. Loading original dataset (Complete Cohort) ---")
-    X_full, y_full, _, _ = preprocess_full_dataset(
+    print("--- 1. Carregant dades originals sense escalar ---")
+    X_full_raw, y_full, _, feature_names = preprocess_full_dataset(
         dataset_path,
         exclude_columns=config.get("exclude_columns", []),
         target_column=config["target_column"],
         random_state=config["random_state"],
-        normalize=config["normalize"],
+        normalize=False, # Escalarem DINS de cada pas per evitar filtració de dades
         apply_smote=False
     )
 
-    # Identificar les columnes categòriques per SMOTENC
-    cat_indices = get_categorical_indices(X_full)
-    print(f"Identified {len(cat_indices)} categorical/binary features for SMOTENC.")
+    cat_indices = get_categorical_indices(X_full_raw)
+    print(f"S'han identificat {len(cat_indices)} variables categòriques/binàries per a SMOTENC.")
 
     models_list = ["PenalizedLogisticRegression", "QDA", "RandomForest", "XGBoost", "DNN"]
     treatments_list = ["No_Treatment", "Class_Weighting", "SMOTENC"]
@@ -216,25 +234,30 @@ def main(config_path, n_bootstraps=100):
     roc_data = {cfg: [] for cfg in configs_to_plot}
     mean_fpr = np.linspace(0, 1, 100)
 
-    print("\n--- 2. Calculating apparent original performance (Complete Cohort) ---")
+    print("\n--- 2. Calculant el rendiment aparent sobre la cohort completa ---")
     original_performance = {}
+
+    # Escalat sobre la cohort completa només per al rendiment aparent
+    scaler_orig = MinMaxScaler()
+    X_full_scaled_orig = pd.DataFrame(scaler_orig.fit_transform(X_full_raw), columns=feature_names)
 
     for treatment in treatments_list:
         if treatment == "SMOTENC":
-            if 0 < len(cat_indices) < X_full.shape[1]:
+            if 0 < len(cat_indices) < X_full_scaled_orig.shape[1]:
                 smote = SMOTENC(categorical_features=cat_indices, random_state=config["random_state"])
             else:
                 smote = SMOTE(random_state=config["random_state"])
-            X_tr_orig, y_tr_orig = smote.fit_resample(X_full, y_full)
+            X_tr_orig, y_tr_orig = smote.fit_resample(X_full_scaled_orig, y_full)
         else:
-            X_tr_orig, y_tr_orig = X_full.copy(), y_full.copy()
+            X_tr_orig, y_tr_orig = X_full_scaled_orig.copy(), y_full.copy()
 
         for model_name in models_list:
-            y_prob_orig = train_and_predict(
+            model_orig = train_model(
                 model_name, treatment, 
-                X_tr_orig, y_tr_orig, X_full, 
-                random_state=config["random_state"]
+                X_tr_orig, y_tr_orig, 
+                seed=config["random_state"]
             )
+            y_prob_orig = predict_probabilities(model_orig, model_name, X_full_scaled_orig)
             orig_thresholds = find_optimized_thresholds(y_full, y_prob_orig)
 
             for criterion in threshold_criteria:
@@ -243,46 +266,56 @@ def main(config_path, n_bootstraps=100):
                 m_orig["Applied_Threshold"] = t_orig
                 original_performance[(model_name, treatment, criterion)] = m_orig
 
-    print(f"\n--- 3. Running Bootstrap ({n_bootstraps} iterations) for optimism correction and ROCs ---")
+    print(f"\n--- 3. Executant el Bootstrap ({n_bootstraps} iteracions) amb escalat i entrenament aïllats ---")
     raw_optimism = []
 
     for b in range(n_bootstraps):
+        current_seed = config["random_state"] + b
         if (b + 1) % 10 == 0 or b == 0:
-            print(f"Bootstrap Round {b + 1}/{n_bootstraps}...")
+            print(f"Iteració Bootstrap {b + 1}/{n_bootstraps}...")
 
-        X_boot, y_boot = resample(
-            X_full, y_full, 
+        # 1. Generar mostra bootstrap sense escalar
+        X_boot_raw, y_boot = resample(
+            X_full_raw, y_full, 
             replace=True, 
             stratify=y_full, 
-            random_state=config["random_state"] + b
+            random_state=current_seed
         )
 
+        # 2. Ajustar el MinMaxScaler ÚNICAMENT a la mostra bootstrap
+        boot_scaler = MinMaxScaler()
+        X_boot_scaled = pd.DataFrame(boot_scaler.fit_transform(X_boot_raw), columns=feature_names)
+        
+        # 3. Transformar la cohort original amb l'escalador après del bootstrap
+        X_full_scaled_from_boot = pd.DataFrame(boot_scaler.transform(X_full_raw), columns=feature_names)
+
         for treatment in treatments_list:
+            # 4. Aplicar SMOTENC ÚNICAMENT a la mostra bootstrap escalada
             if treatment == "SMOTENC":
                 try:
-                    if 0 < len(cat_indices) < X_boot.shape[1]:
-                        smote = SMOTENC(categorical_features=cat_indices, random_state=config["random_state"] + b)
+                    if 0 < len(cat_indices) < X_boot_scaled.shape[1]:
+                        smote = SMOTENC(categorical_features=cat_indices, random_state=current_seed)
                     else:
-                        smote = SMOTE(random_state=config["random_state"] + b)
-                    X_tr_boot, y_tr_boot = smote.fit_resample(X_boot, y_boot)
+                        smote = SMOTE(random_state=current_seed)
+                    X_tr_boot, y_tr_boot = smote.fit_resample(X_boot_scaled, y_boot)
                 except Exception:
-                    X_tr_boot, y_tr_boot = X_boot.copy(), y_boot.copy()
+                    X_tr_boot, y_tr_boot = X_boot_scaled.copy(), y_boot.copy()
             else:
-                X_tr_boot, y_tr_boot = X_boot.copy(), y_boot.copy()
+                X_tr_boot, y_tr_boot = X_boot_scaled.copy(), y_boot.copy()
 
             for model_name in models_list:
-                y_prob_on_boot = train_and_predict(
+                # 5. Entrenar UNA SOLA vegada el model en aquesta iteració
+                trained_model = train_model(
                     model_name, treatment, 
-                    X_tr_boot, y_tr_boot, X_boot, 
-                    random_state=config["random_state"] + b
+                    X_tr_boot, y_tr_boot, 
+                    seed=current_seed
                 )
-                boot_thresholds = find_optimized_thresholds(y_boot, y_prob_on_boot)
 
-                y_prob_on_orig = train_and_predict(
-                    model_name, treatment, 
-                    X_tr_boot, y_tr_boot, X_full, 
-                    random_state=config["random_state"] + b
-                )
+                # 6. Avaluar la MATEIXA instància de model en bootstrap i en cohort original
+                y_prob_on_boot = predict_probabilities(trained_model, model_name, X_boot_scaled)
+                y_prob_on_orig = predict_probabilities(trained_model, model_name, X_full_scaled_from_boot)
+
+                boot_thresholds = find_optimized_thresholds(y_boot, y_prob_on_boot)
                 
                 if (model_name, treatment) in configs_to_plot:
                     fpr, tpr, _ = roc_curve(y_full, y_prob_on_orig)
@@ -308,9 +341,9 @@ def main(config_path, n_bootstraps=100):
                     raw_optimism.append(dict_opt)
 
     # ==========================================
-    # PLOTTING THE ROC CURVES
+    # GENERACIÓ DE GRÀFICS ROC
     # ==========================================
-    print("\nGenerating ROC curves plot...")
+    print("\nGenerant gràfics de corbes ROC...")
     fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(16, 10))
     axes = axes.flatten()
     
@@ -346,16 +379,16 @@ def main(config_path, n_bootstraps=100):
     plt.savefig(plot_output_path, dpi=300, bbox_inches='tight')
     plt.close()
     
-    print(f"[OK] Plot saved successfully at: {plot_output_path}")
+    print(f"[OK] Gràfic guardat a: {plot_output_path}")
 
     # ==========================================
-    # AGGREGATION & FINAL EXPORT
+    # AGREGACIÓ I EXPORTACIÓ FINAL
     # ==========================================
     df_opt = pd.DataFrame(raw_optimism)
     metrics_cols = [
         "AUROC", "AUPRC", "TP", "FP", "TN", "FN",
         "Sensitivity", "Specificity", "PPV", "NPV", "MCC",
-        "Patients_Flagged", "Pct_Flagged", "Patients_Avoided", "Pct_Avoided", "Missed_Infections"
+        "Patients_Flagged", "Pct_Flagged", "Workload_Reduction", "Pct_Workload_Reduction", "Missed_Infections", "Pct_Missed_Infections"
     ]
 
     rows_summary = []
@@ -379,7 +412,7 @@ def main(config_path, n_bootstraps=100):
             ci_inf = np.percentile(orig_m[col] - opt_vals, 2.5)
             ci_sup = np.percentile(orig_m[col] - opt_vals, 97.5)
 
-            is_count = col in ["TP", "FP", "TN", "FN", "Patients_Flagged", "Patients_Avoided", "Missed_Infections"]
+            is_count = col in ["TP", "FP", "TN", "FN", "Patients_Flagged", "Workload_Reduction", "Missed_Infections"]
             dec = 2 if is_count else 4
 
             row_dict[f"{col}_Apparent"] = round(orig_m[col], dec)
@@ -395,8 +428,8 @@ def main(config_path, n_bootstraps=100):
     df_summary.to_csv(output_csv, index=False, sep=",")
 
     print("\n=======================================================")
-    print(f" [OK] SMOTENC evaluation completed!")
-    print(f" Corrected table saved at: {output_csv}")
+    print(f" [OK] Validació bootstrap completada correctament!")
+    print(f" Taula de resultats corregida: {output_csv}")
     print("=======================================================\n")
 
 if __name__ == "__main__":

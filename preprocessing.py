@@ -24,17 +24,19 @@ def get_categorical_indices(X):
             cat_indices.append(i)
     return cat_indices
 
-def preprocess_full_dataset(file_path, exclude_columns=None, target_column="infection", random_state=42, normalize=True, apply_smote=False):
+def preprocess_full_dataset(file_path, exclude_columns=None, target_column="infection", random_state=42, normalize=False, apply_smote=False):
+    """
+    Carrega el dataset. Per defecte normalize=False per permetre que l'escalat
+    es faci estrictament dins de cada iteració del bootstrap.
+    """
     X, y, feature_names = load_dataset(file_path, exclude_columns, target_column)
-    
     cat_indices = get_categorical_indices(X)
 
+    scaler = None
     if normalize:
         scaler = MinMaxScaler()
         X_scaled = scaler.fit_transform(X)
         X = pd.DataFrame(X_scaled, columns=feature_names)
-    else:
-        scaler = None
 
     if apply_smote:
         if 0 < len(cat_indices) < X.shape[1]:
