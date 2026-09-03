@@ -3,8 +3,7 @@ import re
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-import matplotlib.colors as mcolors
+import seaborn as sns
 
 def extreure_ic(val_str):
     """
@@ -134,7 +133,7 @@ def generar_grafic_auroc_grouped(csv_path="bootstrap_results_table.csv", output_
 
 
 # ==========================================
-# 2. HEATMAP AMB CEL·LES PARTIDES (DIAGONAL SPLIT)
+# 2. DOBLE HEATMAP (SENSITIVITY & SPECIFICITY SIDE-BY-SIDE)
 # ==========================================
 def generar_heatmap_partit(csv_path="bootstrap_results_table.csv", output_dir="results"):
     if not os.path.exists(csv_path):
@@ -157,8 +156,8 @@ def generar_heatmap_partit(csv_path="bootstrap_results_table.csv", output_dir="r
     }
 
     criterion_map = {
-        "Sensitivity_0.8": "Sensitivity ≥ 0.80",
         "MCC": "Max MCC",
+        "Sensitivity_0.8": "Sensitivity ≥ 0.80",
         "Youden": "Youden Index"
     }
 
@@ -190,75 +189,57 @@ def generar_heatmap_partit(csv_path="bootstrap_results_table.csv", output_dir="r
         for t in treatments_order:
             desired_index.append(f"{m} ({t})")
 
-    criteria_order = ["Sensitivity ≥ 0.80", "Max MCC", "Youden Index"]
+    criteria_order = ["Max MCC", "Sensitivity ≥ 0.80", "Youden Index"]
 
     pivot_sens = df.pivot(index="Model_Treatment", columns="Criterion_EN", values="Sens_Val").reindex(desired_index)[criteria_order]
     pivot_esp = df.pivot(index="Model_Treatment", columns="Criterion_EN", values="Esp_Val").reindex(desired_index)[criteria_order]
 
-    fig, ax = plt.subplots(figsize=(10, 13))
+    # Configuració del doble Heatmap
+    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(14, 11), sharey=True)
 
-    nrows, ncols = pivot_sens.shape
-    
-    cmap_sens = plt.get_cmap("YlGnBu")
-    cmap_esp = plt.get_cmap("YlOrRd")
-    norm = mcolors.Normalize(vmin=0.0, vmax=1.0)
+    # 1. Heatmap de Sensibilitat (Esquerra)
+    sns.heatmap(
+        pivot_sens, 
+        ax=axes[0], 
+        annot=True, 
+        fmt=".3f", 
+        cmap="YlGnBu", 
+        cbar_kws={'label': 'Optimism-Corrected Sensitivity'},
+        linewidths=1.2, 
+        linecolor='white',
+        vmin=0.0, 
+        vmax=1.0
+    )
+    axes[0].set_title("Sensitivity by Threshold Criterion", fontsize=12, fontweight='bold', pad=15)
+    axes[0].set_xlabel("Threshold Selection Criterion", fontsize=10, fontweight='bold', labelpad=10)
+    axes[0].set_ylabel("Model & Data Treatment", fontsize=10, fontweight='bold', labelpad=10)
+    axes[0].set_xticklabels(axes[0].get_xticklabels(), rotation=15, ha="right", fontweight='bold')
+    axes[0].set_yticklabels(axes[0].get_yticklabels(), fontweight='bold')
 
-    # Dibuixar cada cel·la dividida en diagonal
-    for i in range(nrows):
-        for j in range(ncols):
-            s_val = pivot_sens.iloc[i, j]
-            e_val = pivot_esp.iloc[i, j]
-
-            # Coordenades del quadrat
-            rect = patches.Rectangle((j, i), 1, 1, facecolor="white", edgecolor="white")
-            
-            if pd.notna(s_val):
-                # Triangle superior (Sensibilitat): polygon de (j, i+1), (j+1, i+1), (j, i)
-                poly_sens = patches.Polygon([[j, i+1], [j+1, i+1], [j, i]], facecolor=cmap_sens(norm(s_val)), edgecolor="none")
-                ax.add_patch(poly_sens)
-                # Text Sensibilitat (amunt a l'esquerra)
-                ax.text(j + 0.28, i + 0.68, f"{s_val:.3f}", color="black", fontsize=8.5, fontweight="bold", ha="center", va="center")
-
-            if pd.notna(e_val):
-                # Triangle inferior (Especificitat): polygon de (j+1, i), (j+1, i+1), (j, i)
-                poly_esp = patches.Polygon([[j+1, i], [j+1, i+1], [j, i]], facecolor=cmap_esp(norm(e_val)), edgecolor="none")
-                ax.add_patch(poly_esp)
-                # Text Especificitat (avall a la dreta)
-                ax.text(j + 0.72, i + 0.32, f"{e_val:.3f}", color="black", fontsize=8.5, fontweight="bold", ha="center", va="center")
-
-            # Marc de la cel·la
-            cell_box = patches.Rectangle((j, i), 1, 1, facecolor="none", edgecolor="#dddddd", linewidth=1)
-            ax.add_patch(cell_box)
-
-    # Configuració dels eixos
-    ax.set_xlim(0, ncols)
-    ax.set_ylim(nrows, 0) # Invertit perquès les files vagin de dalt a baix
-    ax.set_xticks(np.arange(ncols) + 0.5)
-    ax.set_xticklabels(pivot_sens.columns, fontsize=10, fontweight="bold", rotation=15)
-    ax.set_yticks(np.arange(nrows) + 0.5)
-    ax.set_yticklabels(pivot_sens.index, fontsize=10, fontweight="bold")
-
-    ax.set_title("Optimism-Corrected Sensitivity (Upper-Left) & Specificity (Lower-Right)", fontsize=12, fontweight="bold", pad=15)
-    ax.set_ylabel("Model & Data Treatment", fontsize=11, fontweight="bold", labelpad=10)
-    ax.set_xlabel("Threshold Selection Criterion", fontsize=11, fontweight="bold", labelpad=10)
-
-    # Afegir barres de color indicatives (Colorbars)
-    sm_sens = plt.cm.ScalarMappable(cmap=cmap_sens, norm=norm)
-    sm_sens.set_array([])
-    cbar_sens = fig.colorbar(sm_sens, ax=ax, orientation='vertical', fraction=0.03, pad=0.02)
-    cbar_sens.set_label('Sensitivity Scale (YlGnBu)', fontsize=9, fontweight='bold')
-
-    sm_esp = plt.cm.ScalarMappable(cmap=cmap_esp, norm=norm)
-    sm_esp.set_array([])
-    cbar_esp = fig.colorbar(sm_esp, ax=ax, orientation='vertical', fraction=0.03, pad=0.08)
-    cbar_esp.set_label('Specificity Scale (YlOrRd)', fontsize=9, fontweight='bold')
+    # 2. Heatmap d'Especificitat (Dreta)
+    sns.heatmap(
+        pivot_esp, 
+        ax=axes[1], 
+        annot=True, 
+        fmt=".3f", 
+        cmap="YlOrRd", 
+        cbar_kws={'label': 'Optimism-Corrected Specificity'},
+        linewidths=1.2, 
+        linecolor='white',
+        vmin=0.0, 
+        vmax=1.0
+    )
+    axes[1].set_title("Specificity by Threshold Criterion", fontsize=12, fontweight='bold', pad=15)
+    axes[1].set_xlabel("Threshold Selection Criterion", fontsize=10, fontweight='bold', labelpad=10)
+    axes[1].set_ylabel("", fontweight='bold') # Buit per estar compartit
+    axes[1].set_xticklabels(axes[1].get_xticklabels(), rotation=15, ha="right", fontweight='bold')
 
     plt.tight_layout()
     os.makedirs(output_dir, exist_ok=True)
-    out_png = os.path.join(output_dir, "sensitivity_specificity_split_heatmap.png")
+    out_png = os.path.join(output_dir, "sensitivity_specificity_side_by_side_heatmap.png")
     plt.savefig(out_png, dpi=300, bbox_inches="tight")
     plt.close()
-    print(f"[OK] Heatmap de cel·les partides desat a: {os.path.abspath(out_png)}")
+    print(f"[OK] Doble Heatmap desat correctament a: {os.path.abspath(out_png)}")
 
 if __name__ == "__main__":
     csv_input = "bootstrap_results_table.csv"
