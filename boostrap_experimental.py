@@ -36,9 +36,7 @@ def set_all_seeds(seed=42):
     tf.random.set_seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
 
-# ==========================================
 # 1. METRICS CALCULATION
-# ==========================================
 def calculate_complete_clinical_metrics(y_true, y_prob, threshold):
     y_pred = (y_prob >= threshold).astype(int)
     tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
@@ -88,9 +86,7 @@ def calculate_complete_clinical_metrics(y_true, y_prob, threshold):
         "Pct_Missed_Infections": pct_missed_infections
     }
 
-# ==========================================
 # 2. OPTIMAL THRESHOLDS SEARCH
-# ==========================================
 def find_optimized_thresholds(y_true, y_prob):
     threshold_grid = np.linspace(0.0, 1.0, 501)
     
@@ -125,9 +121,7 @@ def find_optimized_thresholds(y_true, y_prob):
         "Youden": best_t_youden
     }
 
-# ==========================================
 # 3. SINGLE MODEL TRAINING AND PREDICTION
-# ==========================================
 def train_model(model_name, treatment, X_train_tr, y_train_tr, seed=42):
     """
     Entrena UN ÚNIC model per iteració garantint la mateixa instància
@@ -185,9 +179,7 @@ def predict_probabilities(model, model_name, X_eval):
     else:
         return model.predict_proba(X_eval)[:, 1]
 
-# ==========================================
 # 4. BOOTSTRAP MAIN PIPELINE
-# ==========================================
 def main(config_path, n_bootstraps=100):
     with open(config_path, "r") as f:
         config = json.load(f)
@@ -201,7 +193,7 @@ def main(config_path, n_bootstraps=100):
         exclude_columns=config.get("exclude_columns", []),
         target_column=config["target_column"],
         random_state=config["random_state"],
-        normalize=False, # Escalarem DINS de cada pas per evitar filtració de dades
+        normalize=False, 
         apply_smote=False
     )
 
@@ -212,12 +204,13 @@ def main(config_path, n_bootstraps=100):
     treatments_list = ["No_Treatment", "Class_Weighting", "SMOTENC"]
     threshold_criteria = ["Sensitivity_0.8", "MCC", "Youden"]
 
+
     configs_to_plot = [
         ("PenalizedLogisticRegression", "No_Treatment"),
         ("QDA", "Class_Weighting"),
         ("RandomForest", "No_Treatment"),
         ("XGBoost", "Class_Weighting"),
-        ("DNN", "SMOTENC")
+        ("DNN", "Class_Weighting")
     ]
     
     friendly_names = {
@@ -237,7 +230,7 @@ def main(config_path, n_bootstraps=100):
     print("\n--- 2. Calculant el rendiment aparent sobre la cohort completa ---")
     original_performance = {}
 
-    # Escalat sobre la cohort completa només per al rendiment aparent
+
     scaler_orig = MinMaxScaler()
     X_full_scaled_orig = pd.DataFrame(scaler_orig.fit_transform(X_full_raw), columns=feature_names)
 
@@ -267,14 +260,14 @@ def main(config_path, n_bootstraps=100):
                 original_performance[(model_name, treatment, criterion)] = m_orig
 
     print(f"\n--- 3. Executant el Bootstrap ({n_bootstraps} iteracions) amb escalat i entrenament aïllats ---")
-    raw_optimism = []
+    raw_evaluations = []
 
     for b in range(n_bootstraps):
         current_seed = config["random_state"] + b
         if (b + 1) % 10 == 0 or b == 0:
             print(f"Iteració Bootstrap {b + 1}/{n_bootstraps}...")
 
-        # 1. Generar mostra bootstrap sense escalar
+       
         X_boot_raw, y_boot = resample(
             X_full_raw, y_full, 
             replace=True, 
@@ -282,15 +275,12 @@ def main(config_path, n_bootstraps=100):
             random_state=current_seed
         )
 
-        # 2. Ajustar el MinMaxScaler ÚNICAMENT a la mostra bootstrap
         boot_scaler = MinMaxScaler()
         X_boot_scaled = pd.DataFrame(boot_scaler.fit_transform(X_boot_raw), columns=feature_names)
         
-        # 3. Transformar la cohort original amb l'escalador après del bootstrap
         X_full_scaled_from_boot = pd.DataFrame(boot_scaler.transform(X_full_raw), columns=feature_names)
 
         for treatment in treatments_list:
-            # 4. Aplicar SMOTENC ÚNICAMENT a la mostra bootstrap escalada
             if treatment == "SMOTENC":
                 try:
                     if 0 < len(cat_indices) < X_boot_scaled.shape[1]:
@@ -304,14 +294,12 @@ def main(config_path, n_bootstraps=100):
                 X_tr_boot, y_tr_boot = X_boot_scaled.copy(), y_boot.copy()
 
             for model_name in models_list:
-                # 5. Entrenar UNA SOLA vegada el model en aquesta iteració
                 trained_model = train_model(
                     model_name, treatment, 
                     X_tr_boot, y_tr_boot, 
                     seed=current_seed
                 )
 
-                # 6. Avaluar la MATEIXA instància de model en bootstrap i en cohort original
                 y_prob_on_boot = predict_probabilities(trained_model, model_name, X_boot_scaled)
                 y_prob_on_orig = predict_probabilities(trained_model, model_name, X_full_scaled_from_boot)
 
@@ -326,23 +314,20 @@ def main(config_path, n_bootstraps=100):
                 for criterion in threshold_criteria:
                     t_b = boot_thresholds[criterion]
                     
-                    m_boot = calculate_complete_clinical_metrics(y_boot, y_prob_on_boot, t_b)
                     m_orig_test = calculate_complete_clinical_metrics(y_full, y_prob_on_orig, t_b)
 
-                    dict_opt = {
+                    dict_eval = {
                         "Model": model_name,
                         "Treatment": treatment,
                         "Threshold_Criterion": criterion,
                         "Applied_Threshold": t_b
                     }
-                    for k in m_boot.keys():
-                        dict_opt[k] = m_boot[k] - m_orig_test[k]
+                    for k in m_orig_test.keys():
+                        dict_eval[k] = m_orig_test[k]
 
-                    raw_optimism.append(dict_opt)
+                    raw_evaluations.append(dict_eval)
 
-    # ==========================================
     # GENERACIÓ DE GRÀFICS ROC
-    # ==========================================
     print("\nGenerant gràfics de corbes ROC...")
     fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(16, 10))
     axes = axes.flatten()
@@ -381,10 +366,8 @@ def main(config_path, n_bootstraps=100):
     
     print(f"[OK] Gràfic guardat a: {plot_output_path}")
 
-    # ==========================================
-    # AGREGACIÓ I EXPORTACIÓ FINAL
-    # ==========================================
-    df_opt = pd.DataFrame(raw_optimism)
+    # AGREGACIÓ I EXPORTACIÓ FINAL (OPCIÓ 4 - PERCENTIL DIRECTE)
+    df_evals = pd.DataFrame(raw_evaluations)
     metrics_cols = [
         "AUROC", "AUPRC", "TP", "FP", "TN", "FN",
         "Sensitivity", "Specificity", "PPV", "NPV", "MCC",
@@ -392,7 +375,7 @@ def main(config_path, n_bootstraps=100):
     ]
 
     rows_summary = []
-    grouped = df_opt.groupby(["Model", "Treatment", "Threshold_Criterion"])
+    grouped = df_evals.groupby(["Model", "Treatment", "Threshold_Criterion"])
 
     for (model, treatment, criterion), group in grouped:
         orig_m = original_performance[(model, treatment, criterion)]
@@ -404,19 +387,20 @@ def main(config_path, n_bootstraps=100):
         }
 
         for col in metrics_cols:
-            opt_vals = group[col].values
-            mean_opt = np.mean(opt_vals)
+            vals = group[col].values
             
-            corrected_val = orig_m[col] - mean_opt
+            corrected_val = np.mean(vals)
             
-            ci_inf = np.percentile(orig_m[col] - opt_vals, 2.5)
-            ci_sup = np.percentile(orig_m[col] - opt_vals, 97.5)
+            ci_inf = np.percentile(vals, 2.5)
+            ci_sup = np.percentile(vals, 97.5)
+
+            implicit_optimism = orig_m[col] - corrected_val
 
             is_count = col in ["TP", "FP", "TN", "FN", "Patients_Flagged", "Workload_Reduction", "Missed_Infections"]
             dec = 2 if is_count else 4
 
             row_dict[f"{col}_Apparent"] = round(orig_m[col], dec)
-            row_dict[f"{col}_Optimism"] = round(mean_opt, dec)
+            row_dict[f"{col}_Optimism"] = round(implicit_optimism, dec)
             row_dict[f"{col}_Corrected"] = round(corrected_val, dec)
             row_dict[f"{col} (95% CI)"] = f"{corrected_val:.{dec}f} ({ci_inf:.{dec}f} - {ci_sup:.{dec}f})"
 

@@ -48,7 +48,7 @@ This project is the practical component of the Final Master Project (FMP). Its o
 
 **CONFIGURATION**
 
-Variables are controlled through config.json, such as sensitivity, activation of SMOTE for synthetic data, and whether certain model columns should be ignored.
+Variables are controlled through config.json, such as sensitivity, activation of SMOTENC for synthetic data, and whether certain model columns should be ignored.
 
 **USAGE**
 

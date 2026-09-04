@@ -20,9 +20,7 @@ def extreure_ic(val_str):
         pass
     return None, 0, 0
 
-# ==========================================
 # 1. GRÀFIC DE BARRES AGRUPADES (AUROC)
-# ==========================================
 def generar_grafic_auroc_grouped(csv_path="bootstrap_results_table.csv", output_dir="results"):
     if not os.path.exists(csv_path):
         raise FileNotFoundError(f"El fitxer '{csv_path}' no existeix. Comprova la ruta.")
@@ -132,9 +130,7 @@ def generar_grafic_auroc_grouped(csv_path="bootstrap_results_table.csv", output_
     print(f"[OK] Gràfic de barres d'AUROC desat a: {os.path.abspath(out_png)}")
 
 
-# ==========================================
 # 2. DOBLE HEATMAP (SENSITIVITY & SPECIFICITY SIDE-BY-SIDE)
-# ==========================================
 def generar_heatmap_partit(csv_path="bootstrap_results_table.csv", output_dir="results"):
     if not os.path.exists(csv_path):
         raise FileNotFoundError(f"El fitxer '{csv_path}' no existeix. Comprova la ruta.")
@@ -197,7 +193,7 @@ def generar_heatmap_partit(csv_path="bootstrap_results_table.csv", output_dir="r
     # Configuració del doble Heatmap
     fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(14, 11), sharey=True)
 
-    # 1. Heatmap de Sensibilitat (Esquerra)
+    # 1. Heatmap de Sensibility
     sns.heatmap(
         pivot_sens, 
         ax=axes[0], 
@@ -216,7 +212,7 @@ def generar_heatmap_partit(csv_path="bootstrap_results_table.csv", output_dir="r
     axes[0].set_xticklabels(axes[0].get_xticklabels(), rotation=15, ha="right", fontweight='bold')
     axes[0].set_yticklabels(axes[0].get_yticklabels(), fontweight='bold')
 
-    # 2. Heatmap d'Especificitat (Dreta)
+    # 2. Heatmap especificity
     sns.heatmap(
         pivot_esp, 
         ax=axes[1], 
