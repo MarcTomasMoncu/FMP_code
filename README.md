@@ -61,6 +61,8 @@ In the results folder, the following are automatically generated:
 
 1. taula_resultats_boostrap.csv: Comparison of all models.
 
+2. roc_curves_boostrap.png: Plot of all the 5 models roc curves. 
+
 
 **EXTRA ANALYSIS**
 
@@ -73,4 +75,14 @@ Once executed, two PNG images will be generated and saved directly into the resu
 1. general descriptive summary of the dataset.
 
 2. comparative summary stratifying the data by infection vs. non-infection.
+
+If a graph bar (AUROC comparison) and headmap (Sensibility and specificity comparison) was needed, you should run the plots_results.py from your terminal with the following code:
+
+   $python3 plots_results.py
+
+Once executed, two png images will appear directly into the results/ folder:
+
+1. sensitivity_specificity_side_by_side_headmap.png
+
+2. auroc_grouped_by_treatment.png
 
