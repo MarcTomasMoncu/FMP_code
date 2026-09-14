@@ -106,7 +106,6 @@ def generar_grafic_auroc_grouped(csv_path="bootstrap_results_table.csv", output_
             edgecolor="black", linewidth=0.8, alpha=0.85
         )
 
-        # Iterem incloent errs_sup per sumar-lo a la posició Y
         for rect, val, e_sup in zip(rects, vals, errs_sup):
             if val > 0:
                 ax.text(
@@ -120,7 +119,6 @@ def generar_grafic_auroc_grouped(csv_path="bootstrap_results_table.csv", output_
     ax.set_xticks(x)
     ax.set_xticklabels(models_order, fontsize=10, fontweight="bold")
     
-    # Augmentat el límit Y superior a 1.08 per donar espai al text sobre les barres d'error
     ax.set_ylim([0.4, 1.08]) 
     
     ax.axhline(0.5, color="red", linestyle="--", linewidth=1.2, label="Random Chance (0.50)")
