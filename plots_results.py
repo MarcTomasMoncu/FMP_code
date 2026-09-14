@@ -51,7 +51,7 @@ def generar_grafic_auroc_grouped(csv_path="bootstrap_results_table.csv", output_
     for idx, row in df_youden.iterrows():
         val, err_inf, err_sup = extreure_ic(row["AUROC (95% CI)"])
         if val is None:
-            val = row["AUROC_Corrected"]
+            val = row["AUROC"]
             err_inf, err_sup = 0, 0
             
         parsed_data.append({
@@ -106,18 +106,23 @@ def generar_grafic_auroc_grouped(csv_path="bootstrap_results_table.csv", output_
             edgecolor="black", linewidth=0.8, alpha=0.85
         )
 
-        for rect, val in zip(rects, vals):
+        # Iterem incloent errs_sup per sumar-lo a la posició Y
+        for rect, val, e_sup in zip(rects, vals, errs_sup):
             if val > 0:
                 ax.text(
                     rect.get_x() + rect.get_width() / 2.0,
-                    val + 0.025, f"{val:.2f}",
+                    val + e_sup + 0.012,  # Col·loca el text per sobre de la barra d'error
+                    f"{val:.2f}",
                     ha="center", va="bottom", fontsize=8, fontweight="bold"
                 )
 
-    ax.set_ylabel("Optimism-Corrected AUROC (95% CI)", fontsize=11, fontweight="bold", labelpad=10)
+    ax.set_ylabel("AUROC (95% CI)", fontsize=11, fontweight="bold", labelpad=10)
     ax.set_xticks(x)
     ax.set_xticklabels(models_order, fontsize=10, fontweight="bold")
-    ax.set_ylim([0.4, 1.02])
+    
+    # Augmentat el límit Y superior a 1.08 per donar espai al text sobre les barres d'error
+    ax.set_ylim([0.4, 1.08]) 
+    
     ax.axhline(0.5, color="red", linestyle="--", linewidth=1.2, label="Random Chance (0.50)")
     ax.grid(axis="y", linestyle=":", alpha=0.6)
     ax.legend(title="Data Treatment", title_fontsize='10', loc="upper right", frameon=True, facecolor="white", framealpha=0.9)
@@ -128,7 +133,6 @@ def generar_grafic_auroc_grouped(csv_path="bootstrap_results_table.csv", output_
     plt.savefig(out_png, dpi=300, bbox_inches="tight")
     plt.close()
     print(f"[OK] Gràfic de barres d'AUROC desat a: {os.path.abspath(out_png)}")
-
 
 # 2. DOBLE HEATMAP (SENSITIVITY & SPECIFICITY SIDE-BY-SIDE)
 def generar_heatmap_partit(csv_path="bootstrap_results_table.csv", output_dir="results"):
